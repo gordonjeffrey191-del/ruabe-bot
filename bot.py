@@ -12,6 +12,7 @@ from telegram.ext import (
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_IDS = [int(x) for x in os.environ["ADMIN_IDS"].split(",")]
 CHAT_LINK = os.environ["CHAT_LINK"]
+LOG_CHAT_ID = int(os.environ["LOG_CHAT_ID"])
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 PORT = int(os.environ.get("PORT", 10000))
 
@@ -71,6 +72,11 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ])
 
+    await context.bot.send_message(
+        chat_id=LOG_CHAT_ID,
+        text="📌 Заявка сохранена в лог:\n\n" + text
+    )
+
     for admin_id in ADMIN_IDS:
         await context.bot.send_message(
             chat_id=admin_id,
@@ -102,12 +108,22 @@ async def handle_admin_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         await query.edit_message_text("✅ Заявка одобрена. Ссылка отправлена пользователю.")
 
+        await context.bot.send_message(
+            chat_id=LOG_CHAT_ID,
+            text=f"✅ Заявка пользователя ID {user_id} была одобрена администратором."
+        )
+
     elif action == "reject":
         await context.bot.send_message(
             chat_id=user_id,
             text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
         )
         await query.edit_message_text("❌ Заявка отклонена.")
+
+        await context.bot.send_message(
+            chat_id=LOG_CHAT_ID,
+            text=f"❌ Заявка пользователя ID {user_id} была отклонена администратором."
+        )
 
 
 def main():
