@@ -249,7 +249,6 @@ async def send_main_menu(context, user_id):
         text=main_menu_text(),
         reply_markup=main_menu()
     )
-
     return message.message_id
 
 
@@ -260,21 +259,19 @@ async def send_section_with_back(query, context, section_text, parse_mode=None):
     await safe_delete_query_message(query)
 
     sent_ids = []
+    parts = split_text(section_text)
 
-    for part in split_text(section_text):
+    for index, part in enumerate(parts):
+        is_last_part = index == len(parts) - 1
+
         msg = await context.bot.send_message(
             chat_id=user_id,
             text=part,
-            parse_mode=parse_mode
+            parse_mode=parse_mode,
+            reply_markup=back_button() if is_last_part else None
         )
-        sent_ids.append(msg.message_id)
 
-    last_msg = await context.bot.send_message(
-        chat_id=user_id,
-        text=" ",
-        reply_markup=back_button()
-    )
-    sent_ids.append(last_msg.message_id)
+        sent_ids.append(msg.message_id)
 
     section_messages[user_id] = sent_ids
 
