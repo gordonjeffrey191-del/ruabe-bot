@@ -130,8 +130,8 @@ FAQ_ITEMS = [
 def build_faq_text():
     text = "❓ FAQ\n\n"
     for question, answer in FAQ_ITEMS:
-        text += f"❓ {html.escape(question)}\n"
-        text += f"💬 Ответ: <tg-spoiler>{html.escape(answer)}</tg-spoiler>\n\n"
+        text += f"❓ {question}\n\n"
+        text += f"💬 Ответ: {answer}\n\n"
     return text.strip()
 
 
@@ -400,7 +400,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_section_with_back(query, context, RULES_TEXT)
 
     elif data == "faq":
-        await send_section_with_back(query, context, FAQ_TEXT, parse_mode="HTML")
+        await send_section_with_back(query, context, FAQ_TEXT)
 
     elif data == "safety":
         await send_section_with_back(query, context, SAFETY_TEXT)
