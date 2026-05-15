@@ -36,7 +36,6 @@ def main_menu():
         [InlineKeyboardButton("📜 Правила", callback_data="rules")],
         [InlineKeyboardButton("❓ FAQ", callback_data="faq")],
         [InlineKeyboardButton("🛡️ Безопасность", callback_data="safety")],
-        [],
         [InlineKeyboardButton("📝 Подать заявку", callback_data="apply")]
     ]
 
@@ -55,7 +54,8 @@ def back_button():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "Добро пожаловать в RUABE.\n\n"
+        "👋 Добро пожаловать в RUABE.\n\n"
+        "Активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
         "Перед подачей заявки рекомендуем ознакомиться с информацией ниже."
     )
 
@@ -75,12 +75,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ГЛАВНОЕ МЕНЮ
     if data == "back":
-    await query.edit_message_text(
-        "👋 Добро пожаловать в RUABE.\n\n"
-        "Активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
-        "Перед подачей заявки рекомендуем ознакомиться с информацией ниже.",
-        reply_markup=main_menu()
-    )
+        await query.edit_message_text(
+            "👋 Добро пожаловать в RUABE.\n\n"
+            "Активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
+            "Перед подачей заявки рекомендуем ознакомиться с информацией ниже.",
+            reply_markup=main_menu()
+        )
 
     # ПРАВИЛА
     elif data == "rules":
@@ -112,7 +112,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_answers[user_id] = []
 
         await query.edit_message_text(
-            "Сейчас будет несколько коротких общих вопросов.\n"
+            "📝 Сейчас будет несколько коротких общих вопросов.\n\n"
             "Ответы увидит только администрация."
         )
 
@@ -131,7 +131,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"Ваша заявка одобрена ✅\n\nСсылка на чат:\n{CHAT_LINK}"
+            text=f"✅ Ваша заявка одобрена.\n\nСсылка на чат:\n{CHAT_LINK}"
         )
 
         await query.edit_message_text(
@@ -226,7 +226,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(
-        "Спасибо! Заявка отправлена администрации."
+        "✅ Спасибо! Заявка отправлена администрации."
     )
 
 
