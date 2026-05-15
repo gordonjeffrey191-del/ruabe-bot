@@ -75,12 +75,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ГЛАВНОЕ МЕНЮ
     if data == "back":
-        await query.edit_message_text(
-            "👋 Добро пожаловать в RUABE.\n\n"
-"Активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
-"Перед подачей заявки рекомендуем ознакомиться с информацией ниже."
-            reply_markup=main_menu()
-        )
+    await query.edit_message_text(
+        "👋 Добро пожаловать в RUABE.\n\n"
+        "Активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
+        "Перед подачей заявки рекомендуем ознакомиться с информацией ниже.",
+        reply_markup=main_menu()
+    )
 
     # ПРАВИЛА
     elif data == "rules":
