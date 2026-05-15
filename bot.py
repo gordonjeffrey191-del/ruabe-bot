@@ -29,6 +29,7 @@ questions = [
 ]
 
 user_answers = {}
+section_messages = {}
 
 
 RULES_TEXT = """🗓 Правила чата
@@ -101,94 +102,28 @@ SAFETY_TEXT = """🛡️ Безопасность
 
 
 FAQ_ITEMS = [
-    (
-        "Что может стать причиной отказа?",
-        "Причиной отказа могут стать подозрительное поведение, неадекватные ответы в анкете, нарушение правил ещё до вступления, серьёзные нарушения в прошлых чатах сообщества или явное несоответствие атмосфере сообщества."
-    ),
-    (
-        "Зачем нужна заявка на вступление?",
-        "Заявка нужна для того, чтобы снизить количество случайных, конфликтных или вредоносных участников и сохранить комфортную атмосферу в сообществе."
-    ),
-    (
-        "Сколько обычно рассматривается заявка?",
-        "Обычно заявки рассматриваются довольно быстро, но точное время зависит от активности администрации."
-    ),
-    (
-        "Можно ли использовать анонимный/новый аккаунт?",
-        "Да, использование анонимных или новых аккаунтов допускается, однако администрация может уделять таким аккаунтам больше внимания."
-    ),
-    (
-        "Можно ли скрывать возраст?",
-        "Да, вы не обязаны раскрывать свой реальный возраст. Однако чат предназначен только для лиц старше 16 лет. Если администрации станет известно, что участнику меньше 16 лет, он будет заблокирован без возможности апелляции."
-    ),
-    (
-        "Чат ориентирован только на SFW-тематику?",
-        "Нет. В чате присутствуют разные темы общения, включая отдельный подчат 18+ для обсуждения NSFW-тематики. Однако даже в нём запрещена публикация порнографии, в том числе в частично скрытом или зацензуренном виде."
-    ),
-    (
-        "Насколько важна активность новичков?",
-        "Чат ориентирован на живое общение, поэтому активность новых участников приветствуется и ценится."
-    ),
-    (
-        "Можно ли просто читать чат?",
-        "Постоянное нахождение исключительно в роли наблюдателя не приветствуется. Сообщество строится вокруг активного участия в общении."
-    ),
-    (
-        "Насколько чат активный?",
-        "Активность зависит от времени суток и дней недели, но в чате регулярно происходят обсуждения и общение."
-    ),
-    (
-        "Что делать, если возник конфликт с участником?",
-        "Рекомендуется не усугублять конфликт и обратиться к администрации при необходимости."
-    ),
-    (
-        "Что делать, если кто-то нарушает правила?",
-        "Сообщите об этом администрации и по возможности приложите контекст ситуации."
-    ),
-    (
-        "Есть ли ограничения на никнеймы и аватарки?",
-        "Да. Никнеймы и аватарки не должны нарушать правила сообщества или содержать запрещённый контент."
-    ),
-    (
-        "Есть ли ограничения по стране проживания?",
-        "Нет, ограничений по стране проживания нет."
-    ),
-    (
-        "Нужно ли представляться после вступления?",
-        "Нет, это не обязательно. Однако знакомство с участниками обычно помогает быстрее влиться в общение."
-    ),
-    (
-        "Можно ли покинуть чат и вернуться позже?",
-        "Да, в большинстве случаев повторное вступление возможно."
-    ),
-    (
-        "Можно ли пригласить друга?",
-        "Обычно да, однако приглашённый участник также должен пройти одобрение через бота."
-    ),
-    (
-        "Есть ли в чате подтемы и отдельные подчаты?",
-        "Да. В сообществе присутствуют отдельные подчаты для разных тем и форматов общения."
-    ),
-    (
-        "Есть ли в чате раздел знакомств?",
-        "Да, в сообществе присутствует отдельный подчат для знакомств."
-    ),
-    (
-        "Есть ли раздел для творчества и артов?",
-        "Да, участники могут делиться своим творчеством и работами в соответствующих разделах сообщества."
-    ),
-    (
-        "Можно ли обсуждать личные проблемы?",
-        "Да, если обсуждение остаётся в рамках правил и уважительного общения."
-    ),
-    (
-        "Есть ли у сообщества Discord или другие платформы?",
-        "Да. У сообщества есть официальный Discord-сервер, где участники проводят совместные активности, ивенты и общаются на дополнительные темы."
-    ),
-    (
-        "Можно ли попасть в чат без Reddit?",
-        "Да, наличие Reddit-аккаунта не является обязательным условием для вступления."
-    ),
+    ("Что может стать причиной отказа?", "Причиной отказа могут стать подозрительное поведение, неадекватные ответы в анкете, нарушение правил ещё до вступления, серьёзные нарушения в прошлых чатах сообщества или явное несоответствие атмосфере сообщества."),
+    ("Зачем нужна заявка на вступление?", "Заявка нужна для того, чтобы снизить количество случайных, конфликтных или вредоносных участников и сохранить комфортную атмосферу в сообществе."),
+    ("Сколько обычно рассматривается заявка?", "Обычно заявки рассматриваются довольно быстро, но точное время зависит от активности администрации."),
+    ("Можно ли использовать анонимный/новый аккаунт?", "Да, использование анонимных или новых аккаунтов допускается, однако администрация может уделять таким аккаунтам больше внимания."),
+    ("Можно ли скрывать возраст?", "Да, вы не обязаны раскрывать свой реальный возраст. Однако чат предназначен только для лиц старше 16 лет. Если администрации станет известно, что участнику меньше 16 лет, он будет заблокирован без возможности апелляции."),
+    ("Чат ориентирован только на SFW-тематику?", "Нет. В чате присутствуют разные темы общения, включая отдельный подчат 18+ для обсуждения NSFW-тематики. Однако даже в нём запрещена публикация порнографии, в том числе в частично скрытом или зацензуренном виде."),
+    ("Насколько важна активность новичков?", "Чат ориентирован на живое общение, поэтому активность новых участников приветствуется и ценится."),
+    ("Можно ли просто читать чат?", "Постоянное нахождение исключительно в роли наблюдателя не приветствуется. Сообщество строится вокруг активного участия в общении."),
+    ("Насколько чат активный?", "Активность зависит от времени суток и дней недели, но в чате регулярно происходят обсуждения и общение."),
+    ("Что делать, если возник конфликт с участником?", "Рекомендуется не усугублять конфликт и обратиться к администрации при необходимости."),
+    ("Что делать, если кто-то нарушает правила?", "Сообщите об этом администрации и по возможности приложите контекст ситуации."),
+    ("Есть ли ограничения на никнеймы и аватарки?", "Да. Никнеймы и аватарки не должны нарушать правила сообщества или содержать запрещённый контент."),
+    ("Есть ли ограничения по стране проживания?", "Нет, ограничений по стране проживания нет."),
+    ("Нужно ли представляться после вступления?", "Нет, это не обязательно. Однако знакомство с участниками обычно помогает быстрее влиться в общение."),
+    ("Можно ли покинуть чат и вернуться позже?", "Да, в большинстве случаев повторное вступление возможно."),
+    ("Можно ли пригласить друга?", "Обычно да, однако приглашённый участник также должен пройти одобрение через бота."),
+    ("Есть ли в чате подтемы и отдельные подчаты?", "Да. В сообществе присутствуют отдельные подчаты для разных тем и форматов общения."),
+    ("Есть ли в чате раздел знакомств?", "Да, в сообществе присутствует отдельный подчат для знакомств."),
+    ("Есть ли раздел для творчества и артов?", "Да, участники могут делиться своим творчеством и работами в соответствующих разделах сообщества."),
+    ("Можно ли обсуждать личные проблемы?", "Да, если обсуждение остаётся в рамках правил и уважительного общения."),
+    ("Есть ли у сообщества Discord или другие платформы?", "Да. У сообщества есть официальный Discord-сервер, где участники проводят совместные активности, ивенты и общаются на дополнительные темы."),
+    ("Можно ли попасть в чат без Reddit?", "Да, наличие Reddit-аккаунта не является обязательным условием для вступления."),
 ]
 
 
@@ -214,7 +149,7 @@ def main_menu():
 
 def back_button():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="back")]
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back")]
     ])
 
 
@@ -222,7 +157,7 @@ def submit_application_keyboard(user_id):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Отправить заявку", callback_data=f"submit_application:{user_id}")],
         [InlineKeyboardButton("🔄 Заполнить заново", callback_data=f"reset_application:{user_id}")],
-        [InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="back")]
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back")]
     ])
 
 
@@ -288,31 +223,66 @@ def build_preview_text(user):
     return text
 
 
-async def safe_delete_message(query):
+async def delete_section_messages(context, user_id):
+    message_ids = section_messages.pop(user_id, [])
+
+    for message_id in message_ids:
+        try:
+            await context.bot.delete_message(
+                chat_id=user_id,
+                message_id=message_id
+            )
+        except Exception:
+            pass
+
+
+async def safe_delete_query_message(query):
     try:
         await query.delete_message()
     except Exception:
         pass
 
 
+async def send_main_menu(context, user_id):
+    message = await context.bot.send_message(
+        chat_id=user_id,
+        text=main_menu_text(),
+        reply_markup=main_menu()
+    )
+
+    return message.message_id
+
+
 async def send_section_with_back(query, context, section_text, parse_mode=None):
-    await safe_delete_message(query)
+    user_id = query.from_user.id
+
+    await delete_section_messages(context, user_id)
+    await safe_delete_query_message(query)
+
+    sent_ids = []
 
     for part in split_text(section_text):
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
+        msg = await context.bot.send_message(
+            chat_id=user_id,
             text=part,
             parse_mode=parse_mode
         )
+        sent_ids.append(msg.message_id)
 
-    await context.bot.send_message(
-        chat_id=query.from_user.id,
-        text="⬅️ Вернуться в главное меню",
+    last_msg = await context.bot.send_message(
+        chat_id=user_id,
+        text=" ",
         reply_markup=back_button()
     )
+    sent_ids.append(last_msg.message_id)
+
+    section_messages[user_id] = sent_ids
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await delete_section_messages(context, user_id)
+
     await update.message.reply_text(
         main_menu_text(),
         reply_markup=main_menu()
@@ -322,6 +292,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_first_question(query, context):
     user_id = query.from_user.id
     user_answers[user_id] = []
+
+    await delete_section_messages(context, user_id)
 
     await query.edit_message_text(
         "📝 Сейчас будет несколько коротких общих вопросов.\n\n"
@@ -375,7 +347,6 @@ async def approve_user(query, context, user_id):
             member_limit=1,
             expire_date=datetime.now(timezone.utc) + timedelta(hours=24)
         )
-
         invite_link = invite.invite_link
     else:
         invite_link = CHAT_LINK
@@ -421,12 +392,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    user_id = query.from_user.id
 
     if data == "back":
-        await query.edit_message_text(
-            main_menu_text(),
-            reply_markup=main_menu()
-        )
+        await delete_section_messages(context, user_id)
+        await safe_delete_query_message(query)
+        await send_main_menu(context, user_id)
 
     elif data == "rules":
         await send_section_with_back(query, context, RULES_TEXT)
@@ -441,27 +412,27 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_first_question(query, context)
 
     elif data.startswith("reset_application:"):
-        user_id = int(data.split(":")[1])
+        target_user_id = int(data.split(":")[1])
 
-        if query.from_user.id != user_id:
+        if query.from_user.id != target_user_id:
             await query.answer("Это не ваша заявка.", show_alert=True)
             return
 
         await send_first_question(query, context)
 
     elif data.startswith("submit_application:"):
-        user_id = int(data.split(":")[1])
-        await submit_application(query, context, user_id)
+        target_user_id = int(data.split(":")[1])
+        await submit_application(query, context, target_user_id)
 
     elif data.startswith("accept:"):
         if query.from_user.id not in ADMIN_IDS:
             await query.edit_message_text("У вас нет прав для этого действия.")
             return
 
-        user_id = int(data.split(":")[1])
+        target_user_id = int(data.split(":")[1])
 
         try:
-            await approve_user(query, context, user_id)
+            await approve_user(query, context, target_user_id)
         except Exception as error:
             await query.edit_message_text(
                 "❌ Не удалось создать или отправить ссылку.\n\n"
@@ -473,8 +444,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("У вас нет прав для этого действия.")
             return
 
-        user_id = int(data.split(":")[1])
-        await reject_user(query, context, user_id)
+        target_user_id = int(data.split(":")[1])
+        await reject_user(query, context, target_user_id)
 
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
