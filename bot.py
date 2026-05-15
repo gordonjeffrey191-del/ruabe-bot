@@ -1,5 +1,9 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -25,35 +29,162 @@ questions = [
 user_answers = {}
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_answers[user_id] = []
+# ---------- ГЛАВНОЕ МЕНЮ ----------
 
-    await update.message.reply_text(
-        "Привет! Это бот для подачи заявки в Telegram-чат RUABE.\n\n"
-        "Сейчас будет несколько коротких общих вопросов. "
-        "Ответы увидит только администрация."
+def main_menu():
+    keyboard = [
+        [InlineKeyboardButton("📜 Правила", callback_data="rules")],
+        [InlineKeyboardButton("❓ FAQ", callback_data="faq")],
+        [InlineKeyboardButton("🛡️ Безопасность", callback_data="safety")],
+        [],
+        [InlineKeyboardButton("📝 Подать заявку", callback_data="apply")]
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+def back_button():
+    keyboard = [
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back")]
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+# ---------- START ----------
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "Добро пожаловать в RUABE.\n\n"
+        "Перед подачей заявки рекомендуем ознакомиться с информацией ниже."
     )
 
-    await update.message.reply_text(questions[0])
+    await update.message.reply_text(
+        text,
+        reply_markup=main_menu()
+    )
 
+
+# ---------- КНОПКИ ----------
+
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+
+    # ГЛАВНОЕ МЕНЮ
+    if data == "back":
+        await query.edit_message_text(
+            "Добро пожаловать в RUABE.\n\n"
+            "Перед подачей заявки рекомендуем ознакомиться с информацией ниже.",
+            reply_markup=main_menu()
+        )
+
+    # ПРАВИЛА
+    elif data == "rules":
+        await query.edit_message_text(
+            "📜 Правила\n\n"
+            "Текст правил будет добавлен позже.",
+            reply_markup=back_button()
+        )
+
+    # FAQ
+    elif data == "faq":
+        await query.edit_message_text(
+            "❓ FAQ\n\n"
+            "Ответы на частые вопросы будут добавлены позже.",
+            reply_markup=back_button()
+        )
+
+    # БЕЗОПАСНОСТЬ
+    elif data == "safety":
+        await query.edit_message_text(
+            "🛡️ Безопасность\n\n"
+            "Рекомендации по безопасности будут добавлены позже.",
+            reply_markup=back_button()
+        )
+
+    # ПОДАТЬ ЗАЯВКУ
+    elif data == "apply":
+        user_id = query.from_user.id
+        user_answers[user_id] = []
+
+        await query.edit_message_text(
+            "Сейчас будет несколько коротких общих вопросов.\n"
+            "Ответы увидит только администрация."
+        )
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=questions[0]
+        )
+
+    # ОДОБРЕНИЕ
+    elif data.startswith("accept:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await query.edit_message_text("У вас нет прав для этого действия.")
+            return
+
+        user_id = int(data.split(":")[1])
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"Ваша заявка одобрена ✅\n\nСсылка на чат:\n{CHAT_LINK}"
+        )
+
+        await query.edit_message_text(
+            "✅ Заявка одобрена. Ссылка отправлена пользователю."
+        )
+
+        await context.bot.send_message(
+            chat_id=LOG_CHAT_ID,
+            text=f"✅ Заявка пользователя ID {user_id} была одобрена."
+        )
+
+    # ОТКЛОНЕНИЕ
+    elif data.startswith("reject:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await query.edit_message_text("У вас нет прав для этого действия.")
+            return
+
+        user_id = int(data.split(":")[1])
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
+        )
+
+        await query.edit_message_text("❌ Заявка отклонена.")
+
+        await context.bot.send_message(
+            chat_id=LOG_CHAT_ID,
+            text=f"❌ Заявка пользователя ID {user_id} была отклонена."
+        )
+
+
+# ---------- АНКЕТА ----------
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
 
     if user_id not in user_answers:
-        await update.message.reply_text("Напишите /start, чтобы начать заявку.")
         return
 
     user_answers[user_id].append(update.message.text)
+
     step = len(user_answers[user_id])
 
     if step < len(questions):
         await update.message.reply_text(questions[step])
         return
 
-    username = f"@{user.username}" if user.username else "username отсутствует"
+    username = (
+        f"@{user.username}"
+        if user.username
+        else "username отсутствует"
+    )
 
     text = (
         "📝 Новая заявка в чат\n\n"
@@ -63,12 +194,21 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     for i, answer in enumerate(user_answers[user_id], start=1):
-        text += f"{questions[i-1]}\nОтвет: {answer}\n\n"
+        text += (
+            f"{questions[i - 1]}\n"
+            f"Ответ: {answer}\n\n"
+        )
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Принять", callback_data=f"accept:{user_id}"),
-            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject:{user_id}")
+            InlineKeyboardButton(
+                "✅ Принять",
+                callback_data=f"accept:{user_id}"
+            ),
+            InlineKeyboardButton(
+                "❌ Отклонить",
+                callback_data=f"reject:{user_id}"
+            )
         ]
     ])
 
@@ -85,52 +225,17 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(
-        "Спасибо! Заявка отправлена администрации. "
-        "После рассмотрения вам придёт ответ здесь."
+        "Спасибо! Заявка отправлена администрации."
     )
 
 
-async def handle_admin_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.from_user.id not in ADMIN_IDS:
-        await query.edit_message_text("У вас нет прав для этого действия.")
-        return
-
-    action, user_id_str = query.data.split(":")
-    user_id = int(user_id_str)
-
-    if action == "accept":
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"Ваша заявка одобрена ✅\n\nСсылка на чат:\n{CHAT_LINK}"
-        )
-        await query.edit_message_text("✅ Заявка одобрена. Ссылка отправлена пользователю.")
-
-        await context.bot.send_message(
-            chat_id=LOG_CHAT_ID,
-            text=f"✅ Заявка пользователя ID {user_id} была одобрена администратором."
-        )
-
-    elif action == "reject":
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
-        )
-        await query.edit_message_text("❌ Заявка отклонена.")
-
-        await context.bot.send_message(
-            chat_id=LOG_CHAT_ID,
-            text=f"❌ Заявка пользователя ID {user_id} была отклонена администратором."
-        )
-
+# ---------- ЗАПУСК ----------
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_admin_button))
+    app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
 
     app.run_webhook(
