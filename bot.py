@@ -1,0 +1,129 @@
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+ADMIN_IDS = [int(x) for x in os.environ["ADMIN_IDS"].split(",")]
+CHAT_LINK = os.environ["CHAT_LINK"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+PORT = int(os.environ.get("PORT", 10000))
+
+questions = [
+    "1/3. Как вы нашли наше сообщество?",
+    "2/3. Что вам интересно в чате?",
+    "3/3. Готовы ли вы участвовать в общении, а не только читать?"
+]
+
+user_answers = {}
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_answers[user_id] = []
+
+    await update.message.reply_text(
+        "Привет! Это бот для подачи заявки в Telegram-чат RUABE.\n\n"
+        "Сейчас будет несколько коротких общих вопросов. "
+        "Ответы увидит только администрация."
+    )
+
+    await update.message.reply_text(questions[0])
+
+
+async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+
+    if user_id not in user_answers:
+        await update.message.reply_text("Напишите /start, чтобы начать заявку.")
+        return
+
+    user_answers[user_id].append(update.message.text)
+    step = len(user_answers[user_id])
+
+    if step < len(questions):
+        await update.message.reply_text(questions[step])
+        return
+
+    username = f"@{user.username}" if user.username else "username отсутствует"
+
+    text = (
+        "📝 Новая заявка в чат\n\n"
+        f"Имя: {user.full_name}\n"
+        f"Username: {username}\n"
+        f"ID: {user_id}\n\n"
+    )
+
+    for i, answer in enumerate(user_answers[user_id], start=1):
+        text += f"{questions[i-1]}\nОтвет: {answer}\n\n"
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Принять", callback_data=f"accept:{user_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject:{user_id}")
+        ]
+    ])
+
+    for admin_id in ADMIN_IDS:
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=text,
+            reply_markup=keyboard
+        )
+
+    await update.message.reply_text(
+        "Спасибо! Заявка отправлена администрации. "
+        "После рассмотрения вам придёт ответ здесь."
+    )
+
+
+async def handle_admin_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id not in ADMIN_IDS:
+        await query.edit_message_text("У вас нет прав для этого действия.")
+        return
+
+    action, user_id_str = query.data.split(":")
+    user_id = int(user_id_str)
+
+    if action == "accept":
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"Ваша заявка одобрена ✅\n\nСсылка на чат:\n{CHAT_LINK}"
+        )
+        await query.edit_message_text("✅ Заявка одобрена. Ссылка отправлена пользователю.")
+
+    elif action == "reject":
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
+        )
+        await query.edit_message_text("❌ Заявка отклонена.")
+
+
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle_admin_button))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+    )
+
+
+if __name__ == "__main__":
+    main()
