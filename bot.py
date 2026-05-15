@@ -1,5 +1,4 @@
 import os
-import html
 from datetime import datetime, timedelta, timezone
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -127,15 +126,22 @@ FAQ_ITEMS = [
 ]
 
 
-def build_faq_text():
-    text = "❓ FAQ\n\n"
+def build_faq_blocks():
+    blocks = []
+
     for question, answer in FAQ_ITEMS:
-        text += f"❓ {question}\n\n"
-        text += f"💬 Ответ: {answer}\n\n"
-    return text.strip()
+        block = (
+            "━━━━━━━━━━━━━━\n"
+            f"❓ {question}\n\n"
+            f"💬 Ответ: {answer}\n"
+            "━━━━━━━━━━━━━━"
+        )
+        blocks.append(block)
+
+    return blocks
 
 
-FAQ_TEXT = build_faq_text()
+FAQ_BLOCKS = build_faq_blocks()
 
 
 def main_menu():
@@ -252,7 +258,7 @@ async def send_main_menu(context, user_id):
     return message.message_id
 
 
-async def send_section_with_back(query, context, section_text, parse_mode=None):
+async def send_section_with_back(query, context, section_text):
     user_id = query.from_user.id
 
     await delete_section_messages(context, user_id)
@@ -267,8 +273,35 @@ async def send_section_with_back(query, context, section_text, parse_mode=None):
         msg = await context.bot.send_message(
             chat_id=user_id,
             text=part,
-            parse_mode=parse_mode,
             reply_markup=back_button() if is_last_part else None
+        )
+
+        sent_ids.append(msg.message_id)
+
+    section_messages[user_id] = sent_ids
+
+
+async def send_faq_with_back(query, context):
+    user_id = query.from_user.id
+
+    await delete_section_messages(context, user_id)
+    await safe_delete_query_message(query)
+
+    sent_ids = []
+
+    header = await context.bot.send_message(
+        chat_id=user_id,
+        text="❓ FAQ"
+    )
+    sent_ids.append(header.message_id)
+
+    for index, block in enumerate(FAQ_BLOCKS):
+        is_last_block = index == len(FAQ_BLOCKS) - 1
+
+        msg = await context.bot.send_message(
+            chat_id=user_id,
+            text=block,
+            reply_markup=back_button() if is_last_block else None
         )
 
         sent_ids.append(msg.message_id)
@@ -400,7 +433,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_section_with_back(query, context, RULES_TEXT)
 
     elif data == "faq":
-        await send_section_with_back(query, context, FAQ_TEXT)
+        await send_faq_with_back(query, context)
 
     elif data == "safety":
         await send_section_with_back(query, context, SAFETY_TEXT)
