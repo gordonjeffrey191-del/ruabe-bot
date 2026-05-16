@@ -127,89 +127,52 @@ QUESTIONNAIRE = [
         "id": "age",
         "question": "Сколько вам лет?",
         "buttons": [
-            ["Меньше 16"],
-            ["16–17", "18–21"],
-            ["22–25", "26–30"],
-            ["31–38", "38+"],
+            [{"id": "under16", "text": "Меньше 16", "risk": "red"}],
+            [{"id": "16_17", "text": "16–17", "risk": "warn"}, {"id": "18_21", "text": "18–21", "risk": "ok"}],
+            [{"id": "22_25", "text": "22–25", "risk": "ok"}, {"id": "26_30", "text": "26–30", "risk": "ok"}],
+            [{"id": "31_38", "text": "31–38", "risk": "ok"}, {"id": "38plus", "text": "38+", "risk": "ok"}],
         ],
-        "risk": {
-            "Меньше 16": "red",
-            "16–17": "warn",
-            "18–21": "ok",
-            "22–25": "ok",
-            "26–30": "ok",
-            "31–38": "ok",
-            "38+": "ok",
-        },
     },
     {
         "id": "motivation",
         "question": "Зачем вы хотите вступить в чат?",
         "buttons": [
-            ["Общение", "Знакомства"],
-            ["Дискуссии", "Найти новых людей"],
-            ["Узнать об участниках"],
-            ["Посмотреть чат", "18+ общение"],
+            [{"id": "chat", "text": "Общение", "risk": "ok"}, {"id": "dating", "text": "Знакомства", "risk": "ok"}],
+            [{"id": "discuss", "text": "Дискуссии", "risk": "ok"}, {"id": "people", "text": "Найти новых людей", "risk": "ok"}],
+            [{"id": "learn_members", "text": "Узнать об участниках", "risk": "warn"}],
+            [{"id": "look", "text": "Посмотреть чат", "risk": "warn"}, {"id": "adult", "text": "18+ общение", "risk": "red"}],
         ],
-        "risk": {
-            "Общение": "ok",
-            "Знакомства": "ok",
-            "Дискуссии": "ok",
-            "Найти новых людей": "ok",
-            "Узнать об участниках": "warn",
-            "Посмотреть чат": "warn",
-            "18+ общение": "red",
-        },
     },
     {
         "id": "style",
         "question": "Какой формат общения вам ближе?",
         "buttons": [
-            ["Активное общение"],
-            ["Иногда участвовать"],
-            ["Больше читать"],
-            ["Пока не знаю"],
+            [{"id": "active", "text": "Активное общение", "risk": "ok"}],
+            [{"id": "sometimes", "text": "Иногда участвовать", "risk": "ok"}],
+            [{"id": "read", "text": "Больше читать", "risk": "warn"}],
+            [{"id": "unknown", "text": "Пока не знаю", "risk": "warn"}],
         ],
-        "risk": {
-            "Активное общение": "ok",
-            "Иногда участвовать": "ok",
-            "Больше читать": "warn",
-            "Пока не знаю": "warn",
-        },
     },
     {
         "id": "rules_attitude",
         "question": "Как вы относитесь к правилам в сообществах?",
         "buttons": [
-            ["Они нужны для порядка"],
-            ["Главное — адекватность"],
-            ["Зависит от сообщества"],
-            ["Слишком строгие правила мешают общению"],
+            [{"id": "order", "text": "Они нужны для порядка", "risk": "ok"}],
+            [{"id": "adequate", "text": "Главное — адекватность", "risk": "ok"}],
+            [{"id": "depends", "text": "Зависит от сообщества", "risk": "warn"}],
+            [{"id": "strict_bad", "text": "Слишком строгие правила мешают общению", "risk": "red"}],
         ],
-        "risk": {
-            "Они нужны для порядка": "ok",
-            "Главное — адекватность": "ok",
-            "Зависит от сообщества": "warn",
-            "Слишком строгие правила мешают общению": "red",
-        },
     },
     {
         "id": "anonymity",
         "question": "Как вы относитесь к анонимности участников в интернете?",
         "buttons": [
-            ["Её важно уважать"],
-            ["Каждый сам отвечает за свою анонимность"],
-            ["Зависит от ситуации"],
-            ["Если человек раскрывает информацию о себе — это его проблема"],
-            ["Интернет без анонимности был бы интереснее"],
+            [{"id": "respect", "text": "Её важно уважать", "risk": "ok"}],
+            [{"id": "own_resp", "text": "Каждый сам отвечает за свою анонимность", "risk": "warn"}],
+            [{"id": "depends", "text": "Зависит от ситуации", "risk": "warn"}],
+            [{"id": "their_problem", "text": "Если человек раскрывает информацию о себе — это его проблема", "risk": "red"}],
+            [{"id": "no_anon", "text": "Интернет без анонимности был бы интереснее", "risk": "red"}],
         ],
-        "risk": {
-            "Её важно уважать": "ok",
-            "Каждый сам отвечает за свою анонимность": "warn",
-            "Зависит от ситуации": "warn",
-            "Если человек раскрывает информацию о себе — это его проблема": "red",
-            "Интернет без анонимности был бы интереснее": "red",
-        },
     },
 ]
 
@@ -222,6 +185,15 @@ def risk_icon(risk):
     if risk == "red":
         return "❌"
     return "✅"
+
+
+def find_answer(question_index, answer_id):
+    question = QUESTIONNAIRE[question_index]
+    for row in question["buttons"]:
+        for answer in row:
+            if answer["id"] == answer_id:
+                return answer
+    return None
 
 
 def user_display(user):
@@ -270,13 +242,17 @@ def question_keyboard(question_index):
     for row in question["buttons"]:
         keyboard.append([
             InlineKeyboardButton(
-                answer,
-                callback_data=f"answer:{question_index}:{answer}"
+                answer["text"],
+                callback_data=f"answer:{question_index}:{answer['id']}"
             )
             for answer in row
         ])
 
-    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+    if question_index == 0:
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+    else:
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="q_back")])
+
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -330,11 +306,12 @@ def get_or_create_session(user_id):
 
 
 def start_new_session(user_id):
+    old_session = user_sessions.get(user_id, {})
     user_sessions[user_id] = {
         "current_step": 0,
         "answers": {},
-        "history_risky": user_sessions.get(user_id, {}).get("history_risky", []),
-        "resets": user_sessions.get(user_id, {}).get("resets", 0),
+        "history_risky": old_session.get("history_risky", []),
+        "resets": old_session.get("resets", 0),
         "started_at": datetime.now(timezone.utc),
     }
     return user_sessions[user_id]
@@ -347,12 +324,12 @@ def collect_risky_answers(session):
         if qid not in session["answers"]:
             continue
 
-        answer = session["answers"][qid]
-        risk = question["risk"].get(answer, "ok")
+        answer_data = session["answers"][qid]
+        risk = answer_data["risk"]
 
         if risk in ("warn", "red"):
             risky.append(
-                f"{risk_icon(risk)} {question['question']} — {answer}"
+                f"{risk_icon(risk)} {question['question']} — {answer_data['text']}"
             )
 
     return risky
@@ -374,9 +351,11 @@ def build_preview_text(user):
     text = "📋 Ваша заявка готова к отправке.\n\nПроверьте ответы ниже:\n\n"
 
     for index, question in enumerate(QUESTIONNAIRE, start=1):
-        answer = session["answers"].get(question["id"], "нет ответа")
+        answer_data = session["answers"].get(question["id"])
+        answer_text = answer_data["text"] if answer_data else "нет ответа"
+
         text += f"{index}. {question['question']}\n"
-        text += f"Ответ: {answer}\n\n"
+        text += f"Ответ: {answer_text}\n\n"
 
     text += "Если всё верно — отправьте заявку. Если хотите изменить ответы — заполните анкету заново."
     return text
@@ -402,12 +381,17 @@ def build_application_text(user):
     text += "Ответы:\n\n"
 
     for index, question in enumerate(QUESTIONNAIRE, start=1):
-        answer = session["answers"].get(question["id"], "нет ответа")
-        risk = question["risk"].get(answer, "ok")
-        icon = risk_icon(risk)
+        answer_data = session["answers"].get(question["id"])
+
+        if answer_data:
+            answer_text = answer_data["text"]
+            risk = answer_data["risk"]
+        else:
+            answer_text = "нет ответа"
+            risk = "warn"
 
         text += f"{index}. {question['question']}\n"
-        text += f"{icon} {answer}\n\n"
+        text += f"{risk_icon(risk)} {answer_text}\n\n"
 
     return text
 
@@ -584,7 +568,7 @@ async def handle_answer(query, context):
 
     data_parts = query.data.split(":", 2)
     question_index = int(data_parts[1])
-    answer = data_parts[2]
+    answer_id = data_parts[2]
 
     session = get_or_create_session(user_id)
 
@@ -592,8 +576,14 @@ async def handle_answer(query, context):
         await query.answer("Эта кнопка уже неактуальна.", show_alert=True)
         return
 
+    answer_data = find_answer(question_index, answer_id)
+
+    if not answer_data:
+        await query.answer("Ответ не найден.", show_alert=True)
+        return
+
     question = QUESTIONNAIRE[question_index]
-    session["answers"][question["id"]] = answer
+    session["answers"][question["id"]] = answer_data
 
     if question_index + 1 < len(QUESTIONNAIRE):
         session["current_step"] += 1
@@ -603,6 +593,25 @@ async def handle_answer(query, context):
             build_preview_text(query.from_user),
             reply_markup=submit_application_keyboard(user_id)
         )
+
+
+async def questionnaire_back(query, context):
+    user_id = query.from_user.id
+    session = get_or_create_session(user_id)
+
+    current_step = session["current_step"]
+
+    if current_step <= 0:
+        await safe_delete_query_message(query)
+        await send_main_menu(context, user_id)
+        return
+
+    previous_step = current_step - 1
+    previous_question = QUESTIONNAIRE[previous_step]
+    session["answers"].pop(previous_question["id"], None)
+    session["current_step"] = previous_step
+
+    await send_question(query, context, user_id)
 
 
 async def reset_application(query, context, user_id):
@@ -769,6 +778,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await delete_section_messages(context, user_id)
         await safe_delete_query_message(query)
         await send_main_menu(context, user_id)
+
+    elif data == "q_back":
+        await questionnaire_back(query, context)
 
     elif data == "rules":
         await send_section_with_back(query, context, RULES_TEXT)
