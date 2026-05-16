@@ -5,10 +5,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    filters,
 )
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -21,14 +19,12 @@ PORT = int(os.environ.get("PORT", 10000))
 MAIN_CHAT_ID_RAW = os.environ.get("MAIN_CHAT_ID", "").strip()
 MAIN_CHAT_ID = int(MAIN_CHAT_ID_RAW) if MAIN_CHAT_ID_RAW else None
 
-questions = [
-    "1/3. Как вы нашли наше сообщество?",
-    "2/3. Что вам интересно в чате?",
-    "3/3. Готовы ли вы участвовать в общении, а не только читать?"
-]
+COOLDOWN_MINUTES = 30
 
-user_answers = {}
 section_messages = {}
+user_sessions = {}
+pending_applications = set()
+application_cooldowns = {}
 
 
 RULES_TEXT = """🗓 Правила чата
@@ -126,18 +122,126 @@ FAQ_ITEMS = [
 ]
 
 
+QUESTIONNAIRE = [
+    {
+        "id": "age",
+        "question": "Сколько вам лет?",
+        "buttons": [
+            ["Меньше 16"],
+            ["16–17", "18–21"],
+            ["22–25", "26–30"],
+            ["31–38", "38+"],
+        ],
+        "risk": {
+            "Меньше 16": "red",
+            "16–17": "warn",
+            "18–21": "ok",
+            "22–25": "ok",
+            "26–30": "ok",
+            "31–38": "ok",
+            "38+": "ok",
+        },
+    },
+    {
+        "id": "motivation",
+        "question": "Зачем вы хотите вступить в чат?",
+        "buttons": [
+            ["Общение", "Знакомства"],
+            ["Дискуссии", "Найти новых людей"],
+            ["Узнать об участниках"],
+            ["Посмотреть чат", "18+ общение"],
+        ],
+        "risk": {
+            "Общение": "ok",
+            "Знакомства": "ok",
+            "Дискуссии": "ok",
+            "Найти новых людей": "ok",
+            "Узнать об участниках": "warn",
+            "Посмотреть чат": "warn",
+            "18+ общение": "red",
+        },
+    },
+    {
+        "id": "style",
+        "question": "Какой формат общения вам ближе?",
+        "buttons": [
+            ["Активное общение"],
+            ["Иногда участвовать"],
+            ["Больше читать"],
+            ["Пока не знаю"],
+        ],
+        "risk": {
+            "Активное общение": "ok",
+            "Иногда участвовать": "ok",
+            "Больше читать": "warn",
+            "Пока не знаю": "warn",
+        },
+    },
+    {
+        "id": "rules_attitude",
+        "question": "Как вы относитесь к правилам в сообществах?",
+        "buttons": [
+            ["Они нужны для порядка"],
+            ["Главное — адекватность"],
+            ["Зависит от сообщества"],
+            ["Слишком строгие правила мешают общению"],
+        ],
+        "risk": {
+            "Они нужны для порядка": "ok",
+            "Главное — адекватность": "ok",
+            "Зависит от сообщества": "warn",
+            "Слишком строгие правила мешают общению": "red",
+        },
+    },
+    {
+        "id": "anonymity",
+        "question": "Как вы относитесь к анонимности участников в интернете?",
+        "buttons": [
+            ["Её важно уважать"],
+            ["Каждый сам отвечает за свою анонимность"],
+            ["Зависит от ситуации"],
+            ["Если человек раскрывает информацию о себе — это его проблема"],
+            ["Интернет без анонимности был бы интереснее"],
+        ],
+        "risk": {
+            "Её важно уважать": "ok",
+            "Каждый сам отвечает за свою анонимность": "warn",
+            "Зависит от ситуации": "warn",
+            "Если человек раскрывает информацию о себе — это его проблема": "red",
+            "Интернет без анонимности был бы интереснее": "red",
+        },
+    },
+]
+
+
+def risk_icon(risk):
+    if risk == "ok":
+        return "✅"
+    if risk == "warn":
+        return "⚠️"
+    if risk == "red":
+        return "❌"
+    return "✅"
+
+
+def user_display(user):
+    username = f"@{user.username}" if user.username else "username отсутствует"
+    return (
+        f"Имя: {user.full_name}\n"
+        f"Username: {username}\n"
+        f"ID: {user.id}"
+    )
+
+
 def build_faq_blocks():
     blocks = []
-
     for question, answer in FAQ_ITEMS:
-        block = (
+        blocks.append(
             "━━━━━━━━━━━━━━\n"
             f"❓ {question}\n\n"
             f"💬 Ответ: {answer}\n"
             "━━━━━━━━━━━━━━"
         )
-        blocks.append(block)
-
     return blocks
 
 
@@ -157,6 +261,23 @@ def back_button():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="back")]
     ])
+
+
+def question_keyboard(question_index):
+    question = QUESTIONNAIRE[question_index]
+    keyboard = []
+
+    for row in question["buttons"]:
+        keyboard.append([
+            InlineKeyboardButton(
+                answer,
+                callback_data=f"answer:{question_index}:{answer}"
+            )
+            for answer in row
+        ])
+
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+    return InlineKeyboardMarkup(keyboard)
 
 
 def submit_application_keyboard(user_id):
@@ -196,37 +317,109 @@ def main_menu_text():
     )
 
 
-def build_application_text(user):
-    user_id = user.id
-    username = f"@{user.username}" if user.username else "username отсутствует"
+def get_or_create_session(user_id):
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {
+            "current_step": 0,
+            "answers": {},
+            "history_risky": [],
+            "resets": 0,
+            "started_at": datetime.now(timezone.utc),
+        }
+    return user_sessions[user_id]
 
-    text = (
-        "📝 Новая заявка в чат\n\n"
-        f"Имя: {user.full_name}\n"
-        f"Username: {username}\n"
-        f"ID: {user_id}\n\n"
-    )
 
-    for i, answer in enumerate(user_answers.get(user_id, []), start=1):
-        text += (
-            f"{questions[i - 1]}\n"
-            f"Ответ: {answer}\n\n"
-        )
+def start_new_session(user_id):
+    user_sessions[user_id] = {
+        "current_step": 0,
+        "answers": {},
+        "history_risky": user_sessions.get(user_id, {}).get("history_risky", []),
+        "resets": user_sessions.get(user_id, {}).get("resets", 0),
+        "started_at": datetime.now(timezone.utc),
+    }
+    return user_sessions[user_id]
 
-    return text
+
+def collect_risky_answers(session):
+    risky = []
+    for index, question in enumerate(QUESTIONNAIRE):
+        qid = question["id"]
+        if qid not in session["answers"]:
+            continue
+
+        answer = session["answers"][qid]
+        risk = question["risk"].get(answer, "ok")
+
+        if risk in ("warn", "red"):
+            risky.append(
+                f"{risk_icon(risk)} {question['question']} — {answer}"
+            )
+
+    return risky
+
+
+def add_history_from_current_answers(user_id):
+    session = user_sessions.get(user_id)
+    if not session:
+        return
+
+    risky = collect_risky_answers(session)
+    for item in risky:
+        if item not in session["history_risky"]:
+            session["history_risky"].append(item)
 
 
 def build_preview_text(user):
+    session = get_or_create_session(user.id)
     text = "📋 Ваша заявка готова к отправке.\n\nПроверьте ответы ниже:\n\n"
 
-    for i, answer in enumerate(user_answers.get(user.id, []), start=1):
-        text += (
-            f"{questions[i - 1]}\n"
-            f"Ответ: {answer}\n\n"
-        )
+    for index, question in enumerate(QUESTIONNAIRE, start=1):
+        answer = session["answers"].get(question["id"], "нет ответа")
+        text += f"{index}. {question['question']}\n"
+        text += f"Ответ: {answer}\n\n"
 
     text += "Если всё верно — отправьте заявку. Если хотите изменить ответы — заполните анкету заново."
     return text
+
+
+def build_application_text(user):
+    session = get_or_create_session(user.id)
+
+    text = (
+        "📝 Новая заявка в чат\n\n"
+        f"{user_display(user)}\n\n"
+    )
+
+    if session["resets"] > 0:
+        text += f"🔁 Анкета перезаполнялась: {session['resets']} раз(а)\n"
+
+    if session["history_risky"]:
+        text += "\n⚠️ Ранее выбирались подозрительные ответы:\n"
+        for item in session["history_risky"]:
+            text += f"• {item}\n"
+        text += "\n"
+
+    text += "Ответы:\n\n"
+
+    for index, question in enumerate(QUESTIONNAIRE, start=1):
+        answer = session["answers"].get(question["id"], "нет ответа")
+        risk = question["risk"].get(answer, "ok")
+        icon = risk_icon(risk)
+
+        text += f"{index}. {question['question']}\n"
+        text += f"{icon} {answer}\n\n"
+
+    return text
+
+
+async def log_event(context, text):
+    try:
+        await context.bot.send_message(
+            chat_id=LOG_CHAT_ID,
+            text=text
+        )
+    except Exception:
+        pass
 
 
 async def delete_section_messages(context, user_id):
@@ -250,12 +443,11 @@ async def safe_delete_query_message(query):
 
 
 async def send_main_menu(context, user_id):
-    message = await context.bot.send_message(
+    await context.bot.send_message(
         chat_id=user_id,
         text=main_menu_text(),
         reply_markup=main_menu()
     )
-    return message.message_id
 
 
 async def send_section_with_back(query, context, section_text):
@@ -309,6 +501,44 @@ async def send_faq_with_back(query, context):
     section_messages[user_id] = sent_ids
 
 
+def cooldown_remaining(user_id):
+    last_submit = application_cooldowns.get(user_id)
+    if not last_submit:
+        return None
+
+    cooldown_end = last_submit + timedelta(minutes=COOLDOWN_MINUTES)
+    now = datetime.now(timezone.utc)
+
+    if now >= cooldown_end:
+        return None
+
+    return cooldown_end - now
+
+
+async def check_can_apply(query, context):
+    user_id = query.from_user.id
+
+    if user_id in pending_applications:
+        await query.edit_message_text(
+            "⏳ Ваша заявка уже находится на рассмотрении администрации.\n\n"
+            "Пожалуйста, дождитесь решения.",
+            reply_markup=back_button()
+        )
+        return False
+
+    remaining = cooldown_remaining(user_id)
+    if remaining:
+        minutes = max(1, int(remaining.total_seconds() // 60))
+        await query.edit_message_text(
+            f"⏳ Вы уже недавно отправляли заявку.\n\n"
+            f"Повторная отправка будет доступна примерно через {minutes} мин.",
+            reply_markup=back_button()
+        )
+        return False
+
+    return True
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_section_messages(context, user_id)
@@ -319,21 +549,90 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def send_first_question(query, context):
-    user_id = query.from_user.id
-    user_answers[user_id] = []
-
-    await delete_section_messages(context, user_id)
+async def send_question(query, context, user_id):
+    session = get_or_create_session(user_id)
+    question_index = session["current_step"]
+    question = QUESTIONNAIRE[question_index]
 
     await query.edit_message_text(
-        "📝 Сейчас будет несколько коротких общих вопросов.\n\n"
-        "Ответы увидит только администрация."
+        question["question"],
+        reply_markup=question_keyboard(question_index)
     )
 
-    await context.bot.send_message(
-        chat_id=user_id,
-        text=questions[0]
+
+async def start_application(query, context):
+    user_id = query.from_user.id
+
+    can_apply = await check_can_apply(query, context)
+    if not can_apply:
+        return
+
+    await delete_section_messages(context, user_id)
+    start_new_session(user_id)
+
+    await log_event(
+        context,
+        "🟦 Пользователь начал анкету\n\n"
+        f"{user_display(query.from_user)}"
     )
+
+    await send_question(query, context, user_id)
+
+
+async def handle_answer(query, context):
+    user_id = query.from_user.id
+
+    data_parts = query.data.split(":", 2)
+    question_index = int(data_parts[1])
+    answer = data_parts[2]
+
+    session = get_or_create_session(user_id)
+
+    if question_index != session["current_step"]:
+        await query.answer("Эта кнопка уже неактуальна.", show_alert=True)
+        return
+
+    question = QUESTIONNAIRE[question_index]
+    session["answers"][question["id"]] = answer
+
+    if question_index + 1 < len(QUESTIONNAIRE):
+        session["current_step"] += 1
+        await send_question(query, context, user_id)
+    else:
+        await query.edit_message_text(
+            build_preview_text(query.from_user),
+            reply_markup=submit_application_keyboard(user_id)
+        )
+
+
+async def reset_application(query, context, user_id):
+    if query.from_user.id != user_id:
+        await query.answer("Это не ваша заявка.", show_alert=True)
+        return
+
+    add_history_from_current_answers(user_id)
+
+    previous_session = get_or_create_session(user_id)
+    previous_session["resets"] += 1
+    resets = previous_session["resets"]
+    history = previous_session["history_risky"]
+
+    user_sessions[user_id] = {
+        "current_step": 0,
+        "answers": {},
+        "history_risky": history,
+        "resets": resets,
+        "started_at": datetime.now(timezone.utc),
+    }
+
+    await log_event(
+        context,
+        "🟨 Пользователь сбросил анкету\n\n"
+        f"{user_display(query.from_user)}\n"
+        f"Количество сбросов: {resets}"
+    )
+
+    await send_question(query, context, user_id)
 
 
 async def submit_application(query, context, user_id):
@@ -341,19 +640,45 @@ async def submit_application(query, context, user_id):
         await query.answer("Это не ваша заявка.", show_alert=True)
         return
 
-    if user_id not in user_answers or len(user_answers[user_id]) < len(questions):
+    if user_id in pending_applications:
+        await query.edit_message_text(
+            "⏳ Ваша заявка уже находится на рассмотрении администрации.",
+            reply_markup=back_button()
+        )
+        return
+
+    remaining = cooldown_remaining(user_id)
+    if remaining:
+        minutes = max(1, int(remaining.total_seconds() // 60))
+        await query.edit_message_text(
+            f"⏳ Вы уже недавно отправляли заявку.\n\n"
+            f"Повторная отправка будет доступна примерно через {minutes} мин.",
+            reply_markup=back_button()
+        )
+        return
+
+    session = user_sessions.get(user_id)
+    if not session or len(session["answers"]) < len(QUESTIONNAIRE):
         await query.edit_message_text(
             "Заявка не найдена или заполнена не полностью.",
             reply_markup=back_button()
         )
         return
 
-    user = query.from_user
-    application_text = build_application_text(user)
+    pending_applications.add(user_id)
+    application_cooldowns[user_id] = datetime.now(timezone.utc)
+
+    application_text = build_application_text(query.from_user)
 
     await context.bot.send_message(
         chat_id=LOG_CHAT_ID,
         text="📌 Заявка сохранена в лог:\n\n" + application_text
+    )
+
+    await log_event(
+        context,
+        "🟩 Пользователь отправил заявку\n\n"
+        f"{user_display(query.from_user)}"
     )
 
     for admin_id in ADMIN_IDS:
@@ -378,6 +703,14 @@ async def approve_user(query, context, user_id):
             expire_date=datetime.now(timezone.utc) + timedelta(hours=24)
         )
         invite_link = invite.invite_link
+
+        await log_event(
+            context,
+            "🔗 Создана одноразовая invite-ссылка\n\n"
+            f"Пользователь ID: {user_id}\n"
+            "Лимит: 1 вход\n"
+            "Срок: 24 часа"
+        )
     else:
         invite_link = CHAT_LINK
 
@@ -394,13 +727,17 @@ async def approve_user(query, context, user_id):
         reply_markup=keyboard
     )
 
+    pending_applications.discard(user_id)
+
     await query.edit_message_text(
         "✅ Заявка одобрена. Ссылка отправлена пользователю."
     )
 
-    await context.bot.send_message(
-        chat_id=LOG_CHAT_ID,
-        text=f"✅ Заявка пользователя ID {user_id} была одобрена."
+    await log_event(
+        context,
+        f"✅ Администратор одобрил заявку\n\n"
+        f"Админ: {query.from_user.full_name} ({query.from_user.id})\n"
+        f"Пользователь ID: {user_id}"
     )
 
 
@@ -410,11 +747,15 @@ async def reject_user(query, context, user_id):
         text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
     )
 
+    pending_applications.discard(user_id)
+
     await query.edit_message_text("❌ Заявка отклонена.")
 
-    await context.bot.send_message(
-        chat_id=LOG_CHAT_ID,
-        text=f"❌ Заявка пользователя ID {user_id} была отклонена."
+    await log_event(
+        context,
+        f"❌ Администратор отклонил заявку\n\n"
+        f"Админ: {query.from_user.full_name} ({query.from_user.id})\n"
+        f"Пользователь ID: {user_id}"
     )
 
 
@@ -439,16 +780,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_section_with_back(query, context, SAFETY_TEXT)
 
     elif data == "apply":
-        await send_first_question(query, context)
+        await start_application(query, context)
+
+    elif data.startswith("answer:"):
+        await handle_answer(query, context)
 
     elif data.startswith("reset_application:"):
         target_user_id = int(data.split(":")[1])
-
-        if query.from_user.id != target_user_id:
-            await query.answer("Это не ваша заявка.", show_alert=True)
-            return
-
-        await send_first_question(query, context)
+        await reset_application(query, context, target_user_id)
 
     elif data.startswith("submit_application:"):
         target_user_id = int(data.split(":")[1])
@@ -469,6 +808,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Ошибка: {error}"
             )
 
+            await log_event(
+                context,
+                "⚠️ Ошибка создания или отправки invite-ссылки\n\n"
+                f"Пользователь ID: {target_user_id}\n"
+                f"Ошибка: {error}"
+            )
+
     elif data.startswith("reject:"):
         if query.from_user.id not in ADMIN_IDS:
             await query.edit_message_text("У вас нет прав для этого действия.")
@@ -478,32 +824,11 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reject_user(query, context, target_user_id)
 
 
-async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-
-    if user_id not in user_answers:
-        return
-
-    user_answers[user_id].append(update.message.text)
-    step = len(user_answers[user_id])
-
-    if step < len(questions):
-        await update.message.reply_text(questions[step])
-        return
-
-    await update.message.reply_text(
-        build_preview_text(user),
-        reply_markup=submit_application_keyboard(user_id)
-    )
-
-
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
 
     app.run_webhook(
         listen="0.0.0.0",
