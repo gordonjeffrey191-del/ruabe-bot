@@ -1,4 +1,5 @@
 import os
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -25,6 +26,11 @@ section_messages = {}
 user_sessions = {}
 pending_applications = set()
 application_cooldowns = {}
+
+application_status = {}
+application_locks = {}
+admin_application_messages = {}
+admin_application_texts = {}
 
 
 RULES_TEXT = """🗓 Правила чата
@@ -319,7 +325,7 @@ def start_new_session(user_id):
 
 def collect_risky_answers(session):
     risky = []
-    for index, question in enumerate(QUESTIONNAIRE):
+    for question in QUESTIONNAIRE:
         qid = question["id"]
         if qid not in session["answers"]:
             continue
@@ -394,6 +400,13 @@ def build_application_text(user):
         text += f"{risk_icon(risk)} {answer_text}\n\n"
 
     return text
+
+
+async def safe_callback_answer(query, text=None, show_alert=False):
+    try:
+        await query.answer(text=text, show_alert=show_alert)
+    except Exception:
+        pass
 
 
 async def log_event(context, text):
@@ -523,6 +536,34 @@ async def check_can_apply(query, context):
     return True
 
 
+async def update_admin_application_messages(context, user_id, decision_text):
+    base_text = admin_application_texts.get(user_id, "📝 Заявка")
+    final_text = (
+        f"{base_text}\n\n"
+        "━━━━━━━━━━━━━━\n"
+        f"{decision_text}\n"
+        "Подробности смотрите в лог-чате."
+    )
+
+    for message_info in admin_application_messages.get(user_id, []):
+        try:
+            await context.bot.edit_message_text(
+                chat_id=message_info["chat_id"],
+                message_id=message_info["message_id"],
+                text=final_text,
+                reply_markup=None
+            )
+        except Exception:
+            try:
+                await context.bot.edit_message_reply_markup(
+                    chat_id=message_info["chat_id"],
+                    message_id=message_info["message_id"],
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_section_messages(context, user_id)
@@ -573,17 +614,19 @@ async def handle_answer(query, context):
     session = get_or_create_session(user_id)
 
     if question_index != session["current_step"]:
-        await query.answer("Эта кнопка уже неактуальна.", show_alert=True)
+        await safe_callback_answer(query, "Эта кнопка уже неактуальна.", show_alert=True)
         return
 
     answer_data = find_answer(question_index, answer_id)
 
     if not answer_data:
-        await query.answer("Ответ не найден.", show_alert=True)
+        await safe_callback_answer(query, "Ответ не найден.", show_alert=True)
         return
 
     question = QUESTIONNAIRE[question_index]
     session["answers"][question["id"]] = answer_data
+
+    await safe_callback_answer(query)
 
     if question_index + 1 < len(QUESTIONNAIRE):
         session["current_step"] += 1
@@ -601,6 +644,8 @@ async def questionnaire_back(query, context):
 
     current_step = session["current_step"]
 
+    await safe_callback_answer(query)
+
     if current_step <= 0:
         await safe_delete_query_message(query)
         await send_main_menu(context, user_id)
@@ -616,8 +661,10 @@ async def questionnaire_back(query, context):
 
 async def reset_application(query, context, user_id):
     if query.from_user.id != user_id:
-        await query.answer("Это не ваша заявка.", show_alert=True)
+        await safe_callback_answer(query, "Это не ваша заявка.", show_alert=True)
         return
+
+    await safe_callback_answer(query)
 
     add_history_from_current_answers(user_id)
 
@@ -646,10 +693,11 @@ async def reset_application(query, context, user_id):
 
 async def submit_application(query, context, user_id):
     if query.from_user.id != user_id:
-        await query.answer("Это не ваша заявка.", show_alert=True)
+        await safe_callback_answer(query, "Это не ваша заявка.", show_alert=True)
         return
 
     if user_id in pending_applications:
+        await safe_callback_answer(query)
         await query.edit_message_text(
             "⏳ Ваша заявка уже находится на рассмотрении администрации.",
             reply_markup=back_button()
@@ -659,6 +707,7 @@ async def submit_application(query, context, user_id):
     remaining = cooldown_remaining(user_id)
     if remaining:
         minutes = max(1, int(remaining.total_seconds() // 60))
+        await safe_callback_answer(query)
         await query.edit_message_text(
             f"⏳ Вы уже недавно отправляли заявку.\n\n"
             f"Повторная отправка будет доступна примерно через {minutes} мин.",
@@ -668,16 +717,23 @@ async def submit_application(query, context, user_id):
 
     session = user_sessions.get(user_id)
     if not session or len(session["answers"]) < len(QUESTIONNAIRE):
+        await safe_callback_answer(query)
         await query.edit_message_text(
             "Заявка не найдена или заполнена не полностью.",
             reply_markup=back_button()
         )
         return
 
+    await safe_callback_answer(query)
+
     pending_applications.add(user_id)
+    application_status[user_id] = "pending"
+    application_locks[user_id] = asyncio.Lock()
     application_cooldowns[user_id] = datetime.now(timezone.utc)
 
     application_text = build_application_text(query.from_user)
+    admin_application_texts[user_id] = application_text
+    admin_application_messages[user_id] = []
 
     await context.bot.send_message(
         chat_id=LOG_CHAT_ID,
@@ -691,11 +747,25 @@ async def submit_application(query, context, user_id):
     )
 
     for admin_id in ADMIN_IDS:
-        await context.bot.send_message(
-            chat_id=admin_id,
-            text=application_text,
-            reply_markup=admin_decision_keyboard(user_id)
-        )
+        try:
+            msg = await context.bot.send_message(
+                chat_id=admin_id,
+                text=application_text,
+                reply_markup=admin_decision_keyboard(user_id)
+            )
+
+            admin_application_messages[user_id].append({
+                "chat_id": admin_id,
+                "message_id": msg.message_id
+            })
+        except Exception as error:
+            await log_event(
+                context,
+                "⚠️ Не удалось отправить заявку администратору\n\n"
+                f"Админ ID: {admin_id}\n"
+                f"Пользователь ID: {user_id}\n"
+                f"Ошибка: {error}"
+            )
 
     await query.edit_message_text(
         "✅ Спасибо! Заявка отправлена администрации.",
@@ -703,7 +773,7 @@ async def submit_application(query, context, user_id):
     )
 
 
-async def approve_user(query, context, user_id):
+async def approve_user(context, user_id):
     if MAIN_CHAT_ID:
         invite = await context.bot.create_chat_invite_link(
             chat_id=MAIN_CHAT_ID,
@@ -736,45 +806,124 @@ async def approve_user(query, context, user_id):
         reply_markup=keyboard
     )
 
-    pending_applications.discard(user_id)
 
-    await query.edit_message_text(
-        "✅ Заявка одобрена. Ссылка отправлена пользователю."
-    )
-
-    await log_event(
-        context,
-        f"✅ Администратор одобрил заявку\n\n"
-        f"Админ: {query.from_user.full_name} ({query.from_user.id})\n"
-        f"Пользователь ID: {user_id}"
-    )
-
-
-async def reject_user(query, context, user_id):
+async def reject_user(context, user_id):
     await context.bot.send_message(
         chat_id=user_id,
         text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
     )
 
-    pending_applications.discard(user_id)
 
-    await query.edit_message_text("❌ Заявка отклонена.")
+async def process_admin_decision(query, context, user_id, decision):
+    lock = application_locks.setdefault(user_id, asyncio.Lock())
 
-    await log_event(
-        context,
-        f"❌ Администратор отклонил заявку\n\n"
-        f"Админ: {query.from_user.full_name} ({query.from_user.id})\n"
-        f"Пользователь ID: {user_id}"
-    )
+    async with lock:
+        current_status = application_status.get(user_id)
+
+        if current_status is None:
+            await safe_callback_answer(
+                query,
+                "Эта заявка устарела или не найдена.",
+                show_alert=True
+            )
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            return
+
+        if current_status != "pending":
+            if current_status == "approved":
+                message = "Эта заявка уже была одобрена другим администратором."
+            elif current_status == "rejected":
+                message = "Эта заявка уже была отклонена другим администратором."
+            else:
+                message = "Эта заявка уже была обработана."
+
+            await safe_callback_answer(query, message, show_alert=True)
+
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+
+            return
+
+        await safe_callback_answer(query)
+
+        admin_name = query.from_user.full_name
+        admin_id = query.from_user.id
+
+        if decision == "approve":
+            try:
+                await approve_user(context, user_id)
+            except Exception as error:
+                await query.edit_message_text(
+                    "❌ Не удалось создать или отправить ссылку.\n\n"
+                    f"Ошибка: {error}"
+                )
+
+                await log_event(
+                    context,
+                    "⚠️ Ошибка создания или отправки invite-ссылки\n\n"
+                    f"Пользователь ID: {user_id}\n"
+                    f"Ошибка: {error}"
+                )
+                return
+
+            application_status[user_id] = "approved"
+            pending_applications.discard(user_id)
+
+            decision_text = (
+                "✅ Заявка одобрена.\n"
+                f"Решение принял: {admin_name} ({admin_id})."
+            )
+
+            await update_admin_application_messages(context, user_id, decision_text)
+
+            await log_event(
+                context,
+                f"✅ Администратор одобрил заявку\n\n"
+                f"Админ: {admin_name} ({admin_id})\n"
+                f"Пользователь ID: {user_id}"
+            )
+
+        elif decision == "reject":
+            try:
+                await reject_user(context, user_id)
+            except Exception as error:
+                await log_event(
+                    context,
+                    "⚠️ Не удалось отправить пользователю сообщение об отказе\n\n"
+                    f"Пользователь ID: {user_id}\n"
+                    f"Ошибка: {error}"
+                )
+
+            application_status[user_id] = "rejected"
+            pending_applications.discard(user_id)
+
+            decision_text = (
+                "❌ Заявка отклонена.\n"
+                f"Решение принял: {admin_name} ({admin_id})."
+            )
+
+            await update_admin_application_messages(context, user_id, decision_text)
+
+            await log_event(
+                context,
+                f"❌ Администратор отклонил заявку\n\n"
+                f"Админ: {admin_name} ({admin_id})\n"
+                f"Пользователь ID: {user_id}"
+            )
 
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
     user_id = query.from_user.id
 
     if data == "back":
+        await safe_callback_answer(query)
         await delete_section_messages(context, user_id)
         await safe_delete_query_message(query)
         await send_main_menu(context, user_id)
@@ -783,15 +932,19 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await questionnaire_back(query, context)
 
     elif data == "rules":
+        await safe_callback_answer(query)
         await send_section_with_back(query, context, RULES_TEXT)
 
     elif data == "faq":
+        await safe_callback_answer(query)
         await send_faq_with_back(query, context)
 
     elif data == "safety":
+        await safe_callback_answer(query)
         await send_section_with_back(query, context, SAFETY_TEXT)
 
     elif data == "apply":
+        await safe_callback_answer(query)
         await start_application(query, context)
 
     elif data.startswith("answer:"):
@@ -807,33 +960,22 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("accept:"):
         if query.from_user.id not in ADMIN_IDS:
-            await query.edit_message_text("У вас нет прав для этого действия.")
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
             return
 
         target_user_id = int(data.split(":")[1])
-
-        try:
-            await approve_user(query, context, target_user_id)
-        except Exception as error:
-            await query.edit_message_text(
-                "❌ Не удалось создать или отправить ссылку.\n\n"
-                f"Ошибка: {error}"
-            )
-
-            await log_event(
-                context,
-                "⚠️ Ошибка создания или отправки invite-ссылки\n\n"
-                f"Пользователь ID: {target_user_id}\n"
-                f"Ошибка: {error}"
-            )
+        await process_admin_decision(query, context, target_user_id, "approve")
 
     elif data.startswith("reject:"):
         if query.from_user.id not in ADMIN_IDS:
-            await query.edit_message_text("У вас нет прав для этого действия.")
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
             return
 
         target_user_id = int(data.split(":")[1])
-        await reject_user(query, context, target_user_id)
+        await process_admin_decision(query, context, target_user_id, "reject")
+
+    else:
+        await safe_callback_answer(query, "Неизвестное действие.", show_alert=True)
 
 
 def main():
