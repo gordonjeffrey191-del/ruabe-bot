@@ -565,6 +565,9 @@ async def update_admin_application_messages(context, user_id, decision_text):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
+
     user_id = update.effective_user.id
     await delete_section_messages(context, user_id)
 
