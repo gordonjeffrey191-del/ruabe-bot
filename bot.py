@@ -852,8 +852,6 @@ async def process_admin_decision(query, context, user_id, decision):
 
             return
 
-        await safe_callback_answer(query)
-
         admin_name = query.from_user.full_name
         admin_id = query.from_user.id
 
@@ -861,18 +859,22 @@ async def process_admin_decision(query, context, user_id, decision):
             try:
                 await approve_user(context, user_id)
             except Exception as error:
-                await query.edit_message_text(
-                    "❌ Не удалось создать или отправить ссылку.\n\n"
-                    f"Ошибка: {error}"
+                await safe_callback_answer(
+                    query,
+                    "Не удалось отправить ссылку пользователю. Заявка осталась активной.",
+                    show_alert=True
                 )
 
                 await log_event(
                     context,
-                    "⚠️ Ошибка создания или отправки invite-ссылки\n\n"
+                    "⚠️ Не удалось одобрить заявку\n\n"
+                    "Заявка осталась активной. Кнопки одобрения/отклонения не удалены.\n\n"
                     f"Пользователь ID: {user_id}\n"
                     f"Ошибка: {error}"
                 )
                 return
+
+            await safe_callback_answer(query)
 
             application_status[user_id] = "approved"
             pending_applications.discard(user_id)
@@ -901,6 +903,8 @@ async def process_admin_decision(query, context, user_id, decision):
                     f"Пользователь ID: {user_id}\n"
                     f"Ошибка: {error}"
                 )
+
+            await safe_callback_answer(query)
 
             application_status[user_id] = "rejected"
             pending_applications.discard(user_id)
