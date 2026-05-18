@@ -1385,14 +1385,9 @@ async def start_rejection_with_reason(query, context, user_id):
         )
         return
 
-    admin_rejection_drafts[query.from_user.id] = {
-        "user_id": user_id,
-        "started_at": datetime.now(timezone.utc),
-    }
-
     await safe_callback_answer(query)
 
-    await context.bot.send_message(
+    prompt_message = await context.bot.send_message(
         chat_id=query.from_user.id,
         text=(
             "✉️ Напишите причину отказа для заявителя.\n\n"
@@ -1402,6 +1397,12 @@ async def start_rejection_with_reason(query, context, user_id):
         ),
         reply_markup=cancel_rejection_reason_keyboard(user_id)
     )
+
+    admin_rejection_drafts[query.from_user.id] = {
+        "user_id": user_id,
+        "started_at": datetime.now(timezone.utc),
+        "prompt_message_id": prompt_message.message_id,
+    }
 
 
 async def cancel_rejection_with_reason(query, context, user_id):
@@ -1486,6 +1487,18 @@ async def handle_admin_rejection_reason(update: Update, context: ContextTypes.DE
             )
 
         set_application_status_in_db(user_id, "rejected")
+
+        prompt_message_id = draft.get("prompt_message_id")
+
+        if prompt_message_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=admin_id,
+                    message_id=prompt_message_id
+                )
+            except Exception:
+                pass
+
         admin_rejection_drafts.pop(admin_id, None)
 
         decision_text = (
