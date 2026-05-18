@@ -1,7 +1,11 @@
 import os
 import html
+import json
 import asyncio
 from datetime import datetime, timedelta, timezone
+
+import psycopg2
+from psycopg2.extras import Json
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -17,21 +21,18 @@ CHAT_LINK = os.environ.get("CHAT_LINK", "temporary")
 LOG_CHAT_ID = int(os.environ["LOG_CHAT_ID"])
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 PORT = int(os.environ.get("PORT", 10000))
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 MAIN_CHAT_ID_RAW = os.environ.get("MAIN_CHAT_ID", "").strip()
 MAIN_CHAT_ID = int(MAIN_CHAT_ID_RAW) if MAIN_CHAT_ID_RAW else None
 
 COOLDOWN_MINUTES = 30
+APPLICATION_TTL_DAYS = 3
 
 section_messages = {}
 user_sessions = {}
-pending_applications = set()
 application_cooldowns = {}
-
-application_status = {}
 application_locks = {}
-admin_application_messages = {}
-admin_application_texts = {}
 
 
 RULES_TEXT = """🗓 Правила чата
@@ -182,6 +183,102 @@ QUESTIONNAIRE = [
         ],
     },
 ]
+
+
+def db_connect():
+    return psycopg2.connect(DATABASE_URL)
+
+
+def init_db():
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    user_id BIGINT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    application_text TEXT NOT NULL,
+                    admin_messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+            """)
+
+            cur.execute("""
+                DELETE FROM applications
+                WHERE updated_at < NOW() - INTERVAL '3 days';
+            """)
+
+
+def save_application_to_db(user_id, application_text):
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO applications (
+                    user_id,
+                    status,
+                    application_text,
+                    admin_messages,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, 'pending', %s, '[]'::jsonb, NOW(), NOW())
+                ON CONFLICT (user_id)
+                DO UPDATE SET
+                    status = 'pending',
+                    application_text = EXCLUDED.application_text,
+                    admin_messages = '[]'::jsonb,
+                    created_at = NOW(),
+                    updated_at = NOW();
+            """, (user_id, application_text))
+
+
+def update_application_messages_in_db(user_id, admin_messages):
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE applications
+                SET admin_messages = %s, updated_at = NOW()
+                WHERE user_id = %s;
+            """, (Json(admin_messages), user_id))
+
+
+def get_application_from_db(user_id):
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT status, application_text, admin_messages
+                FROM applications
+                WHERE user_id = %s
+                  AND updated_at >= NOW() - INTERVAL '3 days';
+            """, (user_id,))
+
+            row = cur.fetchone()
+
+            if not row:
+                return None
+
+            status, application_text, admin_messages = row
+
+            return {
+                "status": status,
+                "application_text": application_text,
+                "admin_messages": admin_messages or [],
+            }
+
+
+def set_application_status_in_db(user_id, status):
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE applications
+                SET status = %s, updated_at = NOW()
+                WHERE user_id = %s;
+            """, (status, user_id))
+
+
+def has_pending_application(user_id):
+    app = get_application_from_db(user_id)
+    return bool(app and app["status"] == "pending")
 
 
 def risk_icon(risk):
@@ -556,7 +653,7 @@ def cooldown_remaining(user_id):
 async def check_can_apply(query, context):
     user_id = query.from_user.id
 
-    if user_id in pending_applications:
+    if has_pending_application(user_id):
         await query.edit_message_text(
             "⏳ Ваша заявка уже находится на рассмотрении администрации.\n\n"
             "Пожалуйста, дождитесь решения.",
@@ -578,7 +675,15 @@ async def check_can_apply(query, context):
 
 
 async def update_admin_application_messages(context, user_id, decision_text):
-    base_text = admin_application_texts.get(user_id, "📝 Заявка")
+    app_data = get_application_from_db(user_id)
+
+    if app_data:
+        base_text = app_data["application_text"]
+        admin_messages = app_data["admin_messages"]
+    else:
+        base_text = "📝 Заявка"
+        admin_messages = []
+
     final_text = (
         f"{base_text}\n\n"
         "━━━━━━━━━━━━━━\n"
@@ -586,7 +691,7 @@ async def update_admin_application_messages(context, user_id, decision_text):
         "Подробности смотрите в лог-чате."
     )
 
-    for message_info in admin_application_messages.get(user_id, []):
+    for message_info in admin_messages:
         try:
             await context.bot.edit_message_text(
                 chat_id=message_info["chat_id"],
@@ -741,7 +846,7 @@ async def submit_application(query, context, user_id):
         await safe_callback_answer(query, "Это не ваша заявка.", show_alert=True)
         return
 
-    if user_id in pending_applications:
+    if has_pending_application(user_id):
         await safe_callback_answer(query)
         await query.edit_message_text(
             "⏳ Ваша заявка уже находится на рассмотрении администрации.",
@@ -771,14 +876,12 @@ async def submit_application(query, context, user_id):
 
     await safe_callback_answer(query)
 
-    pending_applications.add(user_id)
-    application_status[user_id] = "pending"
-    application_locks[user_id] = asyncio.Lock()
     application_cooldowns[user_id] = datetime.now(timezone.utc)
 
     application_text = build_application_text(query.from_user)
-    admin_application_texts[user_id] = application_text
-    admin_application_messages[user_id] = []
+    save_application_to_db(user_id, application_text)
+
+    admin_messages = []
 
     await context.bot.send_message(
         chat_id=LOG_CHAT_ID,
@@ -801,7 +904,7 @@ async def submit_application(query, context, user_id):
                 parse_mode="HTML"
             )
 
-            admin_application_messages[user_id].append({
+            admin_messages.append({
                 "chat_id": admin_id,
                 "message_id": msg.message_id
             })
@@ -813,6 +916,8 @@ async def submit_application(query, context, user_id):
                 f"Пользователь ID: {user_id}\n"
                 f"Ошибка: {error}"
             )
+
+    update_application_messages_in_db(user_id, admin_messages)
 
     await query.edit_message_text(
         "✅ Спасибо! Заявка отправлена администрации.",
@@ -865,9 +970,9 @@ async def process_admin_decision(query, context, user_id, decision):
     lock = application_locks.setdefault(user_id, asyncio.Lock())
 
     async with lock:
-        current_status = application_status.get(user_id)
+        app_data = get_application_from_db(user_id)
 
-        if current_status is None:
+        if not app_data:
             await safe_callback_answer(
                 query,
                 "Эта заявка устарела или не найдена.",
@@ -878,6 +983,8 @@ async def process_admin_decision(query, context, user_id, decision):
             except Exception:
                 pass
             return
+
+        current_status = app_data["status"]
 
         if current_status != "pending":
             if current_status == "approved":
@@ -920,8 +1027,7 @@ async def process_admin_decision(query, context, user_id, decision):
 
             await safe_callback_answer(query)
 
-            application_status[user_id] = "approved"
-            pending_applications.discard(user_id)
+            set_application_status_in_db(user_id, "approved")
 
             decision_text = (
                 "✅ Заявка одобрена.\n"
@@ -950,8 +1056,7 @@ async def process_admin_decision(query, context, user_id, decision):
 
             await safe_callback_answer(query)
 
-            application_status[user_id] = "rejected"
-            pending_applications.discard(user_id)
+            set_application_status_in_db(user_id, "rejected")
 
             decision_text = (
                 "❌ Заявка отклонена.\n"
@@ -1037,6 +1142,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    init_db()
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
