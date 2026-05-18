@@ -1308,7 +1308,7 @@ async def reject_user(context, user_id):
     """Отправляет пользователю стандартное сообщение об отказе."""
     await context.bot.send_message(
         chat_id=user_id,
-        text="Спасибо за заявку. Сейчас мы не можем одобрить вступление в чат."
+        text="Ваша заявка была отклонена."
     )
 
 
