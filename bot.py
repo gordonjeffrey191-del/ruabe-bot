@@ -497,7 +497,6 @@ def has_pending_application(user_id):
 
 # region МОДУЛЬ 8. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
-# МОДУЛЬ 8. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # Здесь мелкие функции для поиска, форматирования и защиты.
 # ============================================================
 
@@ -515,10 +514,12 @@ def risk_icon(risk):
 def find_answer(question_index, answer_id):
     """Находит ответ анкеты по номеру вопроса и короткому ID ответа."""
     question = QUESTIONNAIRE[question_index]
+
     for row in question["buttons"]:
         for answer in row:
             if answer["id"] == answer_id:
                 return answer
+
     return None
 
 
@@ -527,29 +528,47 @@ def find_faq_item(faq_id):
     for item in FAQ_ITEMS:
         if item["id"] == faq_id:
             return item
+
     return None
 
 
 def user_display_html(user):
     """
     Формирует кликабельный блок пользователя для заявки.
-    Имя можно нажать, чтобы открыть профиль.
-    ID оформлен как code, чтобы его было проще копировать.
+    Имя и ID можно нажать, чтобы открыть профиль пользователя.
     """
+
     full_name = html.escape(user.full_name)
-    username = f"@{html.escape(user.username)}" if user.username else "username отсутствует"
-    clickable_name = f'<a href="tg://user?id={user.id}">{full_name}</a>'
+
+    username = (
+        f"@{html.escape(user.username)}"
+        if user.username
+        else "username отсутствует"
+    )
+
+    clickable_name = (
+        f'<a href="tg://user?id={user.id}">{full_name}</a>'
+    )
+
+    clickable_id = (
+        f'<a href="tg://user?id={user.id}">{user.id}</a>'
+    )
 
     return (
         f"Имя: {clickable_name}\n"
         f"Username: {username}\n"
-        f"ID: <code>{user.id}</code>"
+        f"ID: {clickable_id}"
     )
 
 
 def user_display_plain(user):
     """Формирует обычный текстовый блок пользователя для технических логов."""
-    username = f"@{user.username}" if user.username else "username отсутствует"
+
+    username = (
+        f"@{user.username}"
+        if user.username
+        else "username отсутствует"
+    )
 
     return (
         f"Имя: {user.full_name}\n"
@@ -560,6 +579,7 @@ def user_display_plain(user):
 
 def split_text(text, max_length=3900):
     """Делит слишком длинный текст на несколько сообщений Telegram."""
+
     parts = []
 
     while len(text) > max_length:
@@ -572,16 +592,19 @@ def split_text(text, max_length=3900):
         text = text[split_at:].strip()
 
     parts.append(text)
+
     return parts
 
 
 def main_menu_text():
     """Текст главного меню бота."""
+
     return (
         "👋 Добро пожаловать в RUABE.\n\n"
         "Мы активный Telegram-чат с живым общением, обсуждениями и сообществом людей из Reddit.\n\n"
         "Перед подачей заявки рекомендуем ознакомиться с информацией ниже."
     )
+
 # endregion
 
 # region МОДУЛЬ 9. КЛАВИАТУРЫ
