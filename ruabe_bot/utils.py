@@ -65,10 +65,6 @@ def user_display_html(user):
         f'<a href="tg://user?id={user.id}">{full_name}</a>'
     )
 
-    clickable_id = (
-        f'<a href="tg://user?id={user.id}">{user.id}</a>'
-    )
-
     profile_url = html.escape(user_profile_url(user.id, user.username), quote=True)
     profile_link = f'<a href="{profile_url}">открыть аккаунт</a>'
 
@@ -76,7 +72,6 @@ def user_display_html(user):
         f"Имя: {clickable_name}\n"
         f"Username: {username}\n"
         f"ID: <code>{user.id}</code>\n"
-        f"ID-ссылка: {clickable_id}\n"
         f"Профиль: {profile_link}"
     )
 
