@@ -31,8 +31,8 @@ async def submit_application(query, context, user_id):
     if blacklist_entry:
         await safe_callback_answer(query)
         await query.edit_message_text(
-            "Вас добавили в чёрный список чата RUABE.\n\n"
-            f"Причина: {blacklist_entry['reason']}",
+            "❌ Вас добавили в чёрный список чата RUABE.\n\n"
+            f"🗂️ Причина: {blacklist_entry['reason']}",
             reply_markup=back_button()
         )
         return

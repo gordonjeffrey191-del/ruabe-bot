@@ -139,8 +139,8 @@ async def handle_admin_blacklist_reason(update: Update, context: ContextTypes.DE
             await context.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "Вас добавили в чёрный список чата RUABE.\n\n"
-                    f"Причина: {reason_text}"
+                    "❌ Вас добавили в чёрный список чата RUABE.\n\n"
+                    f"🗂️ Причина: {reason_text}"
                 )
             )
         except Exception as error:

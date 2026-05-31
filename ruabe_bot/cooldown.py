@@ -34,8 +34,8 @@ async def check_can_apply(query, context):
 
     if blacklist_entry:
         await query.edit_message_text(
-            "Вас добавили в чёрный список чата RUABE.\n\n"
-            f"Причина: {blacklist_entry['reason']}",
+            "❌ Вас добавили в чёрный список чата RUABE.\n\n"
+            f"🗂️ Причина: {blacklist_entry['reason']}",
             reply_markup=back_button()
         )
         return False
