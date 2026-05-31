@@ -47,6 +47,25 @@ def user_profile_url(user_id, username=None):
     return f"tg://user?id={user_id}"
 
 
+async def user_has_avatar(bot, user_id):
+    """Проверяет, есть ли у пользователя аватарка."""
+    try:
+        photos = await bot.get_user_profile_photos(user_id=user_id, limit=1)
+    except Exception:
+        return None
+
+    return photos.total_count > 0
+
+
+async def collect_applicant_extra_info(bot, user):
+    """Собирает дополнительную информацию о подающем заявку."""
+    return {
+        "has_avatar": await user_has_avatar(bot, user.id),
+        "is_premium": bool(getattr(user, "is_premium", False)),
+        "language_code": getattr(user, "language_code", None) or "неизвестно",
+    }
+
+
 def user_display_html(user):
     """
     Формирует кликабельный блок пользователя для заявки.

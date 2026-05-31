@@ -16,7 +16,7 @@ async def send_main_menu(context, user_id):
     await context.bot.send_message(
         chat_id=user_id,
         text=main_menu_text(),
-        reply_markup=main_menu()
+        reply_markup=main_menu(user_id)
     )
 
 
@@ -30,7 +30,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         main_menu_text(),
-        reply_markup=main_menu()
+        reply_markup=main_menu(user_id)
     )
 
 

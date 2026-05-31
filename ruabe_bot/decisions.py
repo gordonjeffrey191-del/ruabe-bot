@@ -6,8 +6,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from .config import ADMIN_IDS, CHAT_LINK, MAIN_CHAT_ID
-from .database import get_application_from_db, set_application_status_in_db
-from .keyboards import cancel_rejection_reason_keyboard
+from .database import (
+    add_application_history,
+    get_application_from_db,
+    set_application_status_in_db,
+)
+from .keyboards import approval_confirmation_keyboard, cancel_rejection_reason_keyboard
 from .state import admin_rejection_drafts, application_locks
 from .telegram_safe import log_event, safe_callback_answer
 
@@ -15,7 +19,31 @@ from .telegram_safe import log_event, safe_callback_answer
 # Здесь администраторы принимают или отклоняют заявки.
 # ============================================================
 
+APPROVAL_INFO_TEXT = """🎉 Ваша заявка была одобрена.
+
+📌 Важная информация о чате RUABE
+
+1. В чате могут находиться только лица старше 16 лет.
+2. RUABE не является площадкой для поиска сексуальных отношений. Чат предназначен для общения, однако знакомства и отношения между участниками могут возникать естественным образом.
+3. RUABE не является NSFW-сообществом. Публикация порнографического контента в чате запрещена.
+4. RUABE ориентирован на активное общение. Постоянное нахождение в чате исключительно в роли наблюдателя может привести к удалению из сообщества.
+5. Если удаление произошло по причине неактивности или недопонимания, пользователь может повторно подать заявку. После двух удалений за неактивность пользователь заносится в чёрный список сообщества и больше не сможет подать заявку.
+6. Каждый участник самостоятельно несёт ответственность за сохранение собственной анонимности и за информацию, которую раскрывает о себе.
+7. Наличие аватарки является обязательным условием нахождения в сообществе. Аккаунты без аватарки могут быть отклонены на этапе рассмотрения заявки или удалены из чата.
+
+Подтверждаете ли вы, что ознакомились с правилами и условиями вступления в чат RUABE и согласны их соблюдать?"""
+
+
 async def approve_user(context, user_id):
+    """Отправляет пользователю условия вступления перед выдачей ссылки."""
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=APPROVAL_INFO_TEXT,
+        reply_markup=approval_confirmation_keyboard(user_id)
+    )
+
+
+async def send_chat_invite(context, user_id):
     """Создаёт одноразовую ссылку и отправляет её пользователю."""
     if MAIN_CHAT_ID:
         invite = await context.bot.create_chat_invite_link(
@@ -44,11 +72,37 @@ async def approve_user(context, user_id):
     await context.bot.send_message(
         chat_id=user_id,
         text=(
-            "✅ Ваша заявка одобрена.\n\n"
+            "✅ Спасибо за подтверждение.\n\n"
             "Нажмите кнопку ниже, чтобы войти в чат."
         ),
         reply_markup=keyboard
     )
+
+
+async def confirm_approval(query, context, user_id):
+    """Выдаёт ссылку только после подтверждения условий вступления."""
+    if query.from_user.id != user_id:
+        await safe_callback_answer(query, "Это подтверждение не для вас.", show_alert=True)
+        return
+
+    app_data = get_application_from_db(user_id)
+
+    if not app_data or app_data["status"] != "approved":
+        await safe_callback_answer(
+            query,
+            "Одобренная заявка не найдена или устарела.",
+            show_alert=True
+        )
+        return
+
+    await safe_callback_answer(query)
+
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    await send_chat_invite(context, user_id)
 
 
 async def reject_user(context, user_id):
@@ -234,6 +288,12 @@ async def handle_admin_rejection_reason(update: Update, context: ContextTypes.DE
             )
 
         set_application_status_in_db(user_id, "rejected")
+        add_application_history(
+            user_id,
+            "rejected_with_reason",
+            admin_id,
+            admin.full_name
+        )
 
         prompt_message_id = draft.get("prompt_message_id")
 
@@ -339,6 +399,12 @@ async def process_admin_decision(query, context, user_id, decision):
             await safe_callback_answer(query)
 
             set_application_status_in_db(user_id, "approved")
+            add_application_history(
+                user_id,
+                "approved",
+                admin_id,
+                admin_name
+            )
 
             decision_text = (
                 "✅ Заявка одобрена.\n"
@@ -368,6 +434,12 @@ async def process_admin_decision(query, context, user_id, decision):
             await safe_callback_answer(query)
 
             set_application_status_in_db(user_id, "rejected")
+            add_application_history(
+                user_id,
+                "rejected",
+                admin_id,
+                admin_name
+            )
 
             decision_text = (
                 "❌ Заявка отклонена.\n"
@@ -382,4 +454,3 @@ async def process_admin_decision(query, context, user_id, decision):
                 f"Админ: {admin_name} ({admin_id})\n"
                 f"Пользователь ID: {user_id}"
             )
-

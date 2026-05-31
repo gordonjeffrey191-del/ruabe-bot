@@ -5,6 +5,7 @@ from .config import ADMIN_IDS, LOG_CHAT_ID
 from .questionnaire import QUESTIONNAIRE
 from .cooldown import cooldown_remaining
 from .database import (
+    get_blacklist_entry,
     has_pending_application,
     save_application_to_db,
     update_application_messages_in_db,
@@ -12,7 +13,7 @@ from .database import (
 from .keyboards import admin_decision_keyboard, back_button
 from .state import application_cooldowns, user_sessions
 from .telegram_safe import log_event, safe_callback_answer
-from .utils import user_display_plain
+from .utils import collect_applicant_extra_info, user_display_plain
 
 # ============================================================
 # МОДУЛЬ 16. ОТПРАВКА ЗАЯВКИ АДМИНАМ
@@ -23,6 +24,17 @@ async def submit_application(query, context, user_id):
     """Отправляет готовую заявку администраторам."""
     if query.from_user.id != user_id:
         await safe_callback_answer(query, "Это не ваша заявка.", show_alert=True)
+        return
+
+    blacklist_entry = get_blacklist_entry(user_id)
+
+    if blacklist_entry:
+        await safe_callback_answer(query)
+        await query.edit_message_text(
+            "Вас добавили в чёрный список чата RUABE.\n\n"
+            f"Причина: {blacklist_entry['reason']}",
+            reply_markup=back_button()
+        )
         return
 
     if has_pending_application(user_id):
@@ -60,7 +72,8 @@ async def submit_application(query, context, user_id):
 
     application_cooldowns[user_id] = datetime.now(timezone.utc)
 
-    application_text = build_application_text(query.from_user)
+    extra_info = await collect_applicant_extra_info(context.bot, query.from_user)
+    application_text = build_application_text(query.from_user, extra_info)
 
     save_application_to_db(user_id, application_text)
 

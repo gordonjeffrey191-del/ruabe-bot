@@ -8,7 +8,7 @@ from telegram.ext import (
 
 from .config import BOT_TOKEN, PORT, WEBHOOK_URL
 from .database import init_db
-from .decisions import handle_admin_rejection_reason
+from .blacklist import handle_admin_text
 from .handlers import buttons
 from .menus import start
 
@@ -24,7 +24,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_rejection_reason))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_text))
 
     app.run_webhook(
         listen="0.0.0.0",
@@ -32,6 +32,5 @@ def main():
         url_path=BOT_TOKEN,
         webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
     )
-
 
 

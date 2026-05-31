@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from .config import COOLDOWN_MINUTES
-from .database import has_pending_application
+from .database import get_blacklist_entry, has_pending_application
 from .keyboards import back_button
 from .state import application_cooldowns
 
@@ -29,6 +29,16 @@ def cooldown_remaining(user_id):
 async def check_can_apply(query, context):
     """Проверяет, может ли пользователь начать новую заявку."""
     user_id = query.from_user.id
+
+    blacklist_entry = get_blacklist_entry(user_id)
+
+    if blacklist_entry:
+        await query.edit_message_text(
+            "Вас добавили в чёрный список чата RUABE.\n\n"
+            f"Причина: {blacklist_entry['reason']}",
+            reply_markup=back_button()
+        )
+        return False
 
     if has_pending_application(user_id):
         await query.edit_message_text(

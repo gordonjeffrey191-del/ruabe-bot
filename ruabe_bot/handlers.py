@@ -1,10 +1,18 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from .blacklist import (
+    cancel_blacklist_reason,
+    remove_blacklist_entry,
+    show_blacklist,
+    show_blacklist_entry,
+    start_blacklist_reason,
+)
 from .config import ADMIN_IDS
 from .rules import RULES_TEXT, SAFETY_TEXT
 from .decisions import (
     cancel_rejection_with_reason,
+    confirm_approval,
     process_admin_decision,
     start_rejection_with_reason,
 )
@@ -71,6 +79,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user_id = int(data.split(":")[1])
         await submit_application(query, context, target_user_id)
 
+    elif data.startswith("confirm_approval:"):
+        target_user_id = int(data.split(":")[1])
+        await confirm_approval(query, context, target_user_id)
+
     elif data.startswith("accept:"):
         if query.from_user.id not in ADMIN_IDS:
             await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
@@ -103,6 +115,44 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user_id = int(data.split(":")[1])
         await process_admin_decision(query, context, target_user_id, "reject")
 
+    elif data == "blacklist":
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        await show_blacklist(query, context)
+
+    elif data.startswith("blacklist_start:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        target_user_id = int(data.split(":")[1])
+        await start_blacklist_reason(query, context, target_user_id)
+
+    elif data.startswith("blacklist_cancel:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        target_user_id = int(data.split(":")[1])
+        await cancel_blacklist_reason(query, context, target_user_id)
+
+    elif data.startswith("blacklist_view:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        target_user_id = int(data.split(":")[1])
+        await show_blacklist_entry(query, context, target_user_id)
+
+    elif data.startswith("blacklist_remove:"):
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        target_user_id = int(data.split(":")[1])
+        await remove_blacklist_entry(query, context, target_user_id)
+
     else:
         await safe_callback_answer(query, "Неизвестное действие.", show_alert=True)
-
