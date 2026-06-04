@@ -85,15 +85,28 @@ def submit_application_keyboard(user_id):
     ])
 
 
+def username_required_keyboard(user_id):
+    """Кнопки экрана, если для отправки заявки нужен username."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Проверить и отправить заявку", callback_data=f"submit_application:{user_id}")],
+        [InlineKeyboardButton("🔄 Заполнить заново", callback_data=f"reset_application:{user_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back")],
+    ])
+
+
 def admin_decision_keyboard(user_id, username=None):
     """Кнопки для администраторов под заявкой."""
-    return InlineKeyboardMarkup([
-        [
+    keyboard = []
+
+    if username:
+        keyboard.append([
             InlineKeyboardButton(
                 "👤 Открыть профиль",
                 url=user_profile_url(user_id, username)
             )
-        ],
+        ])
+
+    keyboard.extend([
         [
             InlineKeyboardButton("✅ Принять", callback_data=f"accept:{user_id}"),
             InlineKeyboardButton("❌ Отклонить", callback_data=f"reject:{user_id}"),
@@ -111,6 +124,8 @@ def admin_decision_keyboard(user_id, username=None):
             )
         ]
     ])
+
+    return InlineKeyboardMarkup(keyboard)
 
 
 def cancel_rejection_reason_keyboard(user_id):
@@ -151,7 +166,9 @@ def cancel_blacklist_reason_keyboard(user_id):
 
 def blacklist_menu_keyboard(entries):
     """Клавиатура списка чёрного списка."""
-    keyboard = []
+    keyboard = [
+        [InlineKeyboardButton("➕ Добавить по ID", callback_data="blacklist_manual_start")]
+    ]
 
     for entry in entries:
         keyboard.append([
@@ -170,15 +187,16 @@ def blacklist_entry_keyboard(user_id):
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "👤 Открыть профиль",
-                url=user_profile_url(user_id)
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 "✅ Убрать из чёрного списка",
                 callback_data=f"blacklist_remove:{user_id}"
             )
         ],
         [InlineKeyboardButton("⬅️ Назад", callback_data="blacklist")]
+    ])
+
+
+def cancel_manual_blacklist_keyboard():
+    """Кнопка отмены ручного добавления в чёрный список."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚫 Отменить", callback_data="blacklist_manual_cancel")]
     ])

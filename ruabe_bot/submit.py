@@ -10,7 +10,7 @@ from .database import (
     save_application_to_db,
     update_application_messages_in_db,
 )
-from .keyboards import admin_decision_keyboard, back_button
+from .keyboards import admin_decision_keyboard, back_button, username_required_keyboard
 from .state import application_cooldowns, user_sessions
 from .telegram_safe import log_event, safe_callback_answer
 from .utils import collect_applicant_extra_info, user_display_plain
@@ -24,6 +24,18 @@ async def submit_application(query, context, user_id):
     """Отправляет готовую заявку администраторам."""
     if query.from_user.id != user_id:
         await safe_callback_answer(query, "Это не ваша заявка.", show_alert=True)
+        return
+
+    if not query.from_user.username:
+        await safe_callback_answer(query)
+        await query.edit_message_text(
+            "Для отправки заявки нужен username Telegram.\n\n"
+            "Сейчас у вашего аккаунта username отсутствует, поэтому администрация "
+            "не сможет полноценно проверить профиль перед вступлением в чат.\n\n"
+            "Добавьте username в настройках Telegram, затем вернитесь сюда "
+            "и нажмите кнопку ниже. Анкету заново заполнять не нужно.",
+            reply_markup=username_required_keyboard(user_id)
+        )
         return
 
     blacklist_entry = get_blacklist_entry(user_id)

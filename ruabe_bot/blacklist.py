@@ -20,8 +20,9 @@ from .keyboards import (
     blacklist_entry_keyboard,
     blacklist_menu_keyboard,
     cancel_blacklist_reason_keyboard,
+    cancel_manual_blacklist_keyboard,
 )
-from .state import admin_blacklist_drafts, application_locks
+from .state import admin_blacklist_drafts, admin_blacklist_manual_drafts, application_locks
 from .telegram_safe import log_event, safe_callback_answer
 
 
@@ -195,8 +196,135 @@ async def handle_admin_blacklist_reason(update: Update, context: ContextTypes.DE
     return True
 
 
+async def start_manual_blacklist(query, context):
+    """Запускает ручное добавление пользователя в чёрный список по ID."""
+    if query.from_user.id not in ADMIN_IDS:
+        await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+        return
+
+    admin_blacklist_manual_drafts[query.from_user.id] = {
+        "step": "user_id",
+        "started_at": datetime.now(timezone.utc),
+    }
+
+    await safe_callback_answer(query)
+
+    await query.edit_message_text(
+        "➕ Ручное добавление в чёрный список\n\n"
+        "Отправьте Telegram ID пользователя, которого нужно добавить.",
+        reply_markup=cancel_manual_blacklist_keyboard()
+    )
+
+
+async def cancel_manual_blacklist(query, context):
+    """Отменяет ручное добавление пользователя в чёрный список."""
+    admin_blacklist_manual_drafts.pop(query.from_user.id, None)
+
+    await safe_callback_answer(query)
+
+    await show_blacklist(query, context)
+
+
+async def handle_manual_blacklist_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает ручное добавление в чёрный список по ID и причине."""
+    admin = update.effective_user
+    admin_id = admin.id
+
+    if admin_id not in ADMIN_IDS:
+        return False
+
+    draft = admin_blacklist_manual_drafts.get(admin_id)
+
+    if not draft:
+        return False
+
+    if update.effective_chat.type != "private":
+        return True
+
+    text = update.message.text.strip()
+
+    if draft["step"] == "user_id":
+        if not text.isdigit():
+            await update.message.reply_text(
+                "ID должен состоять только из цифр. Отправьте Telegram ID пользователя.",
+                reply_markup=cancel_manual_blacklist_keyboard()
+            )
+            return True
+
+        draft["user_id"] = int(text)
+        draft["step"] = "reason"
+
+        await update.message.reply_text(
+            "Теперь отправьте причину добавления в чёрный список.\n\n"
+            "Ограничение: до 1000 символов.",
+            reply_markup=cancel_manual_blacklist_keyboard()
+        )
+        return True
+
+    if draft["step"] == "reason":
+        if not text:
+            await update.message.reply_text("Причина не может быть пустой.")
+            return True
+
+        if len(text) > 1000:
+            await update.message.reply_text(
+                "Причина слишком длинная. Сократите текст до 1000 символов."
+            )
+            return True
+
+        user_id = draft["user_id"]
+        reason_text = text
+
+        add_user_to_blacklist(user_id, reason_text, admin_id, admin.full_name)
+        add_application_history(
+            user_id,
+            "blacklisted",
+            admin_id,
+            admin.full_name
+        )
+
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "❌ Вас добавили в чёрный список чата RUABE.\n\n"
+                    f"🗂️ Причина: {reason_text}"
+                )
+            )
+        except Exception as error:
+            await log_event(
+                context,
+                "⚠️ Не удалось отправить пользователю сообщение о ручном добавлении в чёрный список\n\n"
+                f"Пользователь ID: {user_id}\n"
+                f"Админ: {admin.full_name} ({admin_id})\n"
+                f"Ошибка: {error}"
+            )
+
+        admin_blacklist_manual_drafts.pop(admin_id, None)
+
+        await log_event(
+            context,
+            "🚫 Администратор вручную добавил пользователя в чёрный список\n\n"
+            f"Админ: {admin.full_name} ({admin_id})\n"
+            f"Пользователь ID: {user_id}\n\n"
+            f"Причина:\n{reason_text}"
+        )
+
+        await update.message.reply_text(
+            "✅ Пользователь добавлен в чёрный список."
+        )
+        return True
+
+    return True
+
+
 async def handle_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Роутер текстовых сообщений администраторов."""
+    handled = await handle_manual_blacklist_text(update, context)
+
+    if handled:
+        return
+
     handled = await handle_admin_blacklist_reason(update, context)
 
     if handled:

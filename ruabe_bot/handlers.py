@@ -3,9 +3,11 @@ from telegram.ext import ContextTypes
 
 from .blacklist import (
     cancel_blacklist_reason,
+    cancel_manual_blacklist,
     remove_blacklist_entry,
     show_blacklist,
     show_blacklist_entry,
+    start_manual_blacklist,
     start_blacklist_reason,
 )
 from .config import ADMIN_IDS
@@ -121,6 +123,20 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await show_blacklist(query, context)
+
+    elif data == "blacklist_manual_start":
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        await start_manual_blacklist(query, context)
+
+    elif data == "blacklist_manual_cancel":
+        if query.from_user.id not in ADMIN_IDS:
+            await safe_callback_answer(query, "У вас нет прав для этого действия.", show_alert=True)
+            return
+
+        await cancel_manual_blacklist(query, context)
 
     elif data.startswith("blacklist_start:"):
         if query.from_user.id not in ADMIN_IDS:
