@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from .applications import build_application_text
 from .config import ADMIN_IDS, LOG_CHAT_ID
+from .decisions import APPLICATION_WAITING_INFO_TEXT
 from .questionnaire import QUESTIONNAIRE
 from .cooldown import cooldown_remaining
 from .database import (
@@ -128,6 +129,8 @@ async def submit_application(query, context, user_id):
     update_application_messages_in_db(user_id, admin_messages)
 
     await query.edit_message_text(
-        "✅ Спасибо! Заявка отправлена администрации.",
+        "✅ Спасибо! Заявка отправлена администрации.\n\n"
+        "Пока заявка ожидает рассмотрения, ознакомьтесь с информацией ниже.\n\n"
+        f"{APPLICATION_WAITING_INFO_TEXT}",
         reply_markup=back_button()
     )

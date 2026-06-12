@@ -210,6 +210,20 @@ def cancel_contact_admin_keyboard():
     ])
 
 
+def contact_admin_message_keyboard(user_id):
+    """Кнопка ответа на сообщение пользователя администрации."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✉️ Ответить", callback_data=f"contact_reply:{user_id}")]
+    ])
+
+
+def cancel_contact_reply_keyboard(user_id):
+    """Кнопка отмены ответа пользователю от администрации."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚫 Отменить", callback_data=f"contact_reply_cancel:{user_id}")]
+    ])
+
+
 def contact_admin_settings_keyboard(enabled):
     """Кнопки управления связью с администрацией для админов."""
     if enabled:

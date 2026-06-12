@@ -9,3 +9,5 @@ admin_rejection_drafts = {}
 admin_blacklist_drafts = {}
 admin_blacklist_manual_drafts = {}
 user_contact_drafts = {}
+user_contact_cooldowns = {}
+admin_contact_reply_drafts = {}

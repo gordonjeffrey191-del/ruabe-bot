@@ -11,7 +11,13 @@ from .blacklist import (
     start_blacklist_reason,
 )
 from .config import ADMIN_IDS
-from .contact import cancel_contact_admin, start_contact_admin, toggle_contact_admin
+from .contact import (
+    cancel_contact_admin,
+    cancel_contact_reply,
+    start_contact_admin,
+    start_contact_reply,
+    toggle_contact_admin,
+)
 from .rules import RULES_TEXT, SAFETY_TEXT
 from .decisions import (
     cancel_rejection_with_reason,
@@ -75,6 +81,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "contact_admin_toggle":
         await toggle_contact_admin(query, context)
+
+    elif data.startswith("contact_reply:"):
+        target_user_id = int(data.split(":")[1])
+        await start_contact_reply(query, context, target_user_id)
+
+    elif data.startswith("contact_reply_cancel:"):
+        target_user_id = int(data.split(":")[1])
+        await cancel_contact_reply(query, context, target_user_id)
 
     elif data == "apply":
         await safe_callback_answer(query)

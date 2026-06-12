@@ -11,7 +11,7 @@ from .database import (
     get_application_from_db,
     set_application_status_in_db,
 )
-from .keyboards import approval_confirmation_keyboard, cancel_rejection_reason_keyboard
+from .keyboards import cancel_rejection_reason_keyboard
 from .state import admin_rejection_drafts, application_locks
 from .telegram_safe import log_event, safe_callback_answer
 
@@ -19,9 +19,7 @@ from .telegram_safe import log_event, safe_callback_answer
 # Здесь администраторы принимают или отклоняют заявки.
 # ============================================================
 
-APPROVAL_INFO_TEXT = """🎉 Ваша заявка была одобрена.
-
-📌 Важная информация о чате RUABE
+APPLICATION_WAITING_INFO_TEXT = """📌 Важная информация о чате RUABE
 
 1. В чате могут находиться только лица старше 16 лет.
 2. RUABE не является площадкой для поиска сексуальных отношений. Чат предназначен для общения, однако знакомства и отношения между участниками могут возникать естественным образом.
@@ -30,17 +28,12 @@ APPROVAL_INFO_TEXT = """🎉 Ваша заявка была одобрена.
 5. Если удаление произошло по причине неактивности или недопонимания, пользователь может повторно подать заявку. После двух удалений за неактивность пользователь заносится в чёрный список сообщества и больше не сможет подать заявку.
 6. Каждый участник самостоятельно несёт ответственность за сохранение собственной анонимности и за информацию, которую раскрывает о себе.
 7. Наличие аватарки является обязательным условием нахождения в сообществе. Аккаунты без аватарки могут быть отклонены на этапе рассмотрения заявки или удалены из чата.
-
-Подтверждаете ли вы, что ознакомились с правилами и условиями вступления в чат RUABE и согласны их соблюдать?"""
+"""
 
 
 async def approve_user(context, user_id):
-    """Отправляет пользователю условия вступления перед выдачей ссылки."""
-    await context.bot.send_message(
-        chat_id=user_id,
-        text=APPROVAL_INFO_TEXT,
-        reply_markup=approval_confirmation_keyboard(user_id)
-    )
+    """Создаёт одноразовую ссылку и отправляет её пользователю."""
+    await send_chat_invite(context, user_id)
 
 
 async def send_chat_invite(context, user_id):
