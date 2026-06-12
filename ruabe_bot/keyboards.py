@@ -15,6 +15,7 @@ def main_menu(user_id=None):
         [InlineKeyboardButton("📜 Правила", callback_data="rules")],
         [InlineKeyboardButton("❓ FAQ", callback_data="faq")],
         [InlineKeyboardButton("🛡️ Безопасность", callback_data="safety")],
+        [InlineKeyboardButton("📩 Связь с администрацией", callback_data="contact_admin")],
         [InlineKeyboardButton("📝 Подать заявку", callback_data="apply")],
     ]
 
@@ -199,4 +200,24 @@ def cancel_manual_blacklist_keyboard():
     """Кнопка отмены ручного добавления в чёрный список."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚫 Отменить", callback_data="blacklist_manual_cancel")]
+    ])
+
+
+def cancel_contact_admin_keyboard():
+    """Кнопка отмены сообщения администрации."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚫 Отменить", callback_data="contact_admin_cancel")]
+    ])
+
+
+def contact_admin_settings_keyboard(enabled):
+    """Кнопки управления связью с администрацией для админов."""
+    if enabled:
+        toggle_text = "🔕 Отключить связь"
+    else:
+        toggle_text = "🔔 Включить связь"
+
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(toggle_text, callback_data="contact_admin_toggle")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back")]
     ])

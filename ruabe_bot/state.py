@@ -8,3 +8,4 @@ application_locks = {}
 admin_rejection_drafts = {}
 admin_blacklist_drafts = {}
 admin_blacklist_manual_drafts = {}
+user_contact_drafts = {}

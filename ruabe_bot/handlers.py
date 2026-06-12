@@ -11,6 +11,7 @@ from .blacklist import (
     start_blacklist_reason,
 )
 from .config import ADMIN_IDS
+from .contact import cancel_contact_admin, start_contact_admin, toggle_contact_admin
 from .rules import RULES_TEXT, SAFETY_TEXT
 from .decisions import (
     cancel_rejection_with_reason,
@@ -65,6 +66,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "safety":
         await safe_callback_answer(query)
         await send_section_with_back(query, context, SAFETY_TEXT)
+
+    elif data == "contact_admin":
+        await start_contact_admin(query, context)
+
+    elif data == "contact_admin_cancel":
+        await cancel_contact_admin(query, context)
+
+    elif data == "contact_admin_toggle":
+        await toggle_contact_admin(query, context)
 
     elif data == "apply":
         await safe_callback_answer(query)

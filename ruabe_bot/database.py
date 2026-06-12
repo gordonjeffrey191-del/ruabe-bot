@@ -56,6 +56,14 @@ def init_db():
             """)
 
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS bot_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+            """)
+
+            cur.execute("""
                 DELETE FROM applications
                 WHERE updated_at < NOW() - INTERVAL '3 days';
             """)
@@ -250,6 +258,48 @@ def get_blacklist_entries(limit=50):
                 }
                 for user_id, reason, admin_id, admin_name, created_at in cur.fetchall()
             ]
+
+
+def get_bot_setting(key, default=None):
+    """Возвращает значение настройки бота."""
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT value
+                FROM bot_settings
+                WHERE key = %s;
+            """, (key,))
+
+            row = cur.fetchone()
+
+            if not row:
+                return default
+
+            return row[0]
+
+
+def set_bot_setting(key, value):
+    """Сохраняет значение настройки бота."""
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO bot_settings (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key)
+                DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = NOW();
+            """, (key, value))
+
+
+def is_contact_admin_enabled():
+    """Проверяет, включена ли связь с администрацией."""
+    return get_bot_setting("contact_admin_enabled", "true") == "true"
+
+
+def set_contact_admin_enabled(enabled):
+    """Включает или отключает связь с администрацией."""
+    set_bot_setting("contact_admin_enabled", "true" if enabled else "false")
 
 
 def has_pending_application(user_id):
